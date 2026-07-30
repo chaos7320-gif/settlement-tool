@@ -33,12 +33,21 @@
   });
 })();
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 
   :root{
     --bg:#f6f7fb; --card:#ffffff; --border:#e3e6ee; --text:#1f2430; --sub:#6b7280;
     --accent:#3b5bfd; --accent2:#eef1ff; --good:#0e9f6e; --bad:#e0373e; --warn:#d97706;
   }
+  [data-theme="dark"]{
+    --bg:#0a0a0a; --card:#171717; --border:#262626; --text:#fafafa; --sub:#a3a3a3;
+    --accent:#5b7bff; --accent2:#1a1f3d; --good:#34d399; --bad:#f87171; --warn:#fbbf24;
+  }
+  [data-theme="dark"] .formula{color:#c7cdfa;border-color:#333a6b;}
+  [data-theme="dark"] th{background:#111318;}
+  [data-theme="dark"] .dropzone{background:#111318;}
+  [data-theme="dark"] .sum-box, [data-theme="dark"] .mall-card{background:#111318;}
   *{box-sizing:border-box;}
   body{margin:0;font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text);}
   header{background:linear-gradient(135deg,#3b5bfd,#6b46ff);color:#fff;padding:28px 32px;}
@@ -87,6 +96,29 @@
 .page{display:none;}
 .page.active{display:block;}
 .handoff-box{background:var(--accent2);border:1px dashed #b9c5ff;border-radius:10px;padding:14px 16px;margin-bottom:18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.theme-toggle{margin-left:auto;margin-right:12px;align-self:center;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:9999px;padding:6px 14px;font-size:12.5px;font-weight:600;cursor:pointer;}
+.theme-toggle:hover{background:rgba(255,255,255,.22);}
+.dash-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+.kpi-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:20px;}
+@media (max-width:900px){.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.kpi-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;}
+.kpi-card.accent{background:linear-gradient(135deg,#3b5bfd,#6b46ff);border-color:transparent;}
+.kpi-card.accent .kpi-label,.kpi-card.accent .kpi-val{color:#fff;}
+.kpi-label{font-size:11.5px;color:var(--sub);font-weight:600;margin-bottom:8px;}
+.kpi-val{font-size:19px;font-weight:700;color:var(--text);line-height:1.25;}
+.kpi-sub{font-size:11px;color:var(--sub);margin-top:6px;}
+.chart-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:14px;}
+@media (max-width:900px){.chart-grid{grid-template-columns:1fr;}}
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;}
+.chart-title{font-size:14px;font-weight:700;color:var(--text);margin:0 0 12px;}
+.chart-box{position:relative;height:280px;}
+.chart-box.small{height:240px;}
+.dash-empty{text-align:center;padding:60px 20px;color:var(--sub);font-size:13.5px;background:var(--card);border:1px dashed var(--border);border-radius:14px;}
+.month-row td.actions{text-align:right;}
+.linklike{color:var(--bad);cursor:pointer;font-size:12px;font-weight:600;background:none;border:none;}
+.linklike:hover{text-decoration:underline;}
+.save-dash-box{background:var(--accent2);border:1px dashed #b9c5ff;border-radius:10px;padding:14px 16px;margin-top:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+[data-theme="dark"] .save-dash-box{border-color:#333a6b;}
 </style>
 </head>
 <body>
@@ -97,6 +129,8 @@
 <div class="top-tabs">
   <div class="top-tab active" data-page="page1">1단계 · 정산서 표준화</div>
   <div class="top-tab" data-page="page2">2단계 · ERP 매칭 &amp; 손익계산</div>
+  <div class="top-tab" data-page="page3">📊 정산 대시보드</div>
+  <button class="theme-toggle" id="themeToggleBtn" type="button">🌙 다크모드</button>
 </div>
 
 <div id="page1" class="page active">
@@ -209,6 +243,62 @@
     <div class="flex" style="margin-top:14px;">
       <button class="btn" id="s2_exportBtn">엑셀로 내보내기</button>
       <span class="footer-note">요약 / 매칭상세 / ERP미매칭 / 표준정산미매칭 / 이상치 시트가 포함됩니다.</span>
+    </div>
+    <div class="save-dash-box">
+      <span>📊 이 결과를 정산 대시보드에 누적 저장할 수 있어요.</span>
+      <label style="font-size:12.5px;">귀속월 <input type="month" id="dashMonthInput" class="txt"></label>
+      <button class="btn" id="saveDashBtn" type="button">이 달 데이터로 저장</button>
+      <span class="footer-note" id="dashSaveStatus"></span>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+
+<div id="page3" class="page">
+<div class="wrap">
+<header>
+  <h1>📊 정산 대시보드</h1>
+  <p>매달 2단계에서 저장한 손익 결과를 누적해서 월별 추이와 몰별 비중을 보여줍니다.</p>
+</header>
+<div class="wrap">
+
+  <div class="dash-toolbar">
+    <button class="btn gray" id="dashRefreshBtn" type="button">🔄 새로고침</button>
+    <label style="font-size:12.5px;">비교 기준월 <select id="dashMonthSel" class="txt"></select></label>
+    <span class="footer-note" id="dashUpdatedNote"></span>
+  </div>
+
+  <div id="dashEmpty" class="dash-empty">아직 저장된 정산 데이터가 없습니다. 2단계에서 매칭 결과를 만든 뒤 "이 달 데이터로 저장"을 눌러주세요.</div>
+
+  <div id="dashContent" style="display:none;">
+    <div class="kpi-grid" id="dashKpis"></div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3 class="chart-title">월별 매출 &amp; 매출이익 추이</h3>
+        <div class="chart-box"><canvas id="dashTrendChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3 class="chart-title" id="dashDonutTitle">몰별 매출 비중</h3>
+        <div class="chart-box"><canvas id="dashMallDonut"></canvas></div>
+      </div>
+    </div>
+
+    <div class="chart-card" style="margin-bottom:14px;">
+      <h3 class="chart-title">몰별 누적 매출이익 (Top 10)</h3>
+      <div class="chart-box small"><canvas id="dashMallBar"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-badge">·</span> 월별 저장 이력</h2>
+      <div class="scrollbox">
+        <table>
+          <thead><tr><th>귀속월</th><th class="num">매출</th><th class="num">매출원가</th><th class="num">매출이익</th><th class="num">매출이익율</th><th class="num">실입금액</th><th>저장시각</th><th></th></tr></thead>
+          <tbody id="dashHistoryBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -1540,6 +1630,236 @@ document.getElementById("handoffBtn").addEventListener("click", function(){
   statusEl.textContent = "✅ 가져오기 완료!";
   checkReady();
 });
+
+window.__STAGE2_GET_RESULT__ = function(){ return (typeof lastResult !== "undefined") ? lastResult : null; };
+})();
+</script>
+
+<script>
+(function(){
+/* ===================== 다크모드 토글 ===================== */
+var themeBtn = document.getElementById("themeToggleBtn");
+function applyTheme(t){
+  document.documentElement.setAttribute("data-theme", t);
+  themeBtn.textContent = (t==="dark") ? "☀️ 라이트모드" : "🌙 다크모드";
+  try{ localStorage.setItem("settlementTheme", t); }catch(e){}
+}
+applyTheme((function(){ try{ return localStorage.getItem("settlementTheme")||"light"; }catch(e){ return "light"; } })());
+themeBtn.addEventListener("click", function(){
+  applyTheme(document.documentElement.getAttribute("data-theme")==="dark" ? "light" : "dark");
+  if(dashCache) renderDashboard(dashCache);
+});
+
+/* ===================== 공통 유틸 ===================== */
+function dfmt(n){ return Math.round(n||0).toLocaleString("ko-KR"); }
+var DASH_API = "/api/data";
+var MALL_COLORS = ["#3b5bfd","#ff5b3a","#0e9f6e","#7c3aed","#d97706","#0284c7","#e0373e","#a3a3a3","#059669","#db2777"];
+
+/* ===================== 저장 (2단계 결과 -> 대시보드) ===================== */
+var dashMonthInput = document.getElementById("dashMonthInput");
+dashMonthInput.value = new Date().toISOString().slice(0,7);
+
+async function fetchDashData(){
+  try{
+    var res = await fetch(DASH_API, {cache:"no-store"});
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){
+    console.warn("대시보드 데이터 로드 실패:", e.message);
+    return null;
+  }
+}
+async function saveDashData(data){
+  var res = await fetch(DASH_API, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data)});
+  if(!res.ok) throw new Error("저장 실패");
+  return await res.json();
+}
+
+document.getElementById("saveDashBtn").addEventListener("click", async function(){
+  var statusEl = document.getElementById("dashSaveStatus");
+  var r = window.__STAGE2_GET_RESULT__ ? window.__STAGE2_GET_RESULT__() : null;
+  if(!r || !r.mallSummary || r.mallSummary.length===0){
+    statusEl.textContent = "⚠️ 먼저 2단계에서 매칭 & 손익계산을 실행해주세요.";
+    return;
+  }
+  var month = dashMonthInput.value;
+  if(!month){ statusEl.textContent = "⚠️ 귀속월을 선택해주세요."; return; }
+
+  statusEl.textContent = "저장 중...";
+  try{
+    var data = (await fetchDashData()) || {months:{}};
+    if(!data.months) data.months = {};
+    if(data.months[month] && !window.confirm(month+" 데이터가 이미 저장되어 있습니다. 덮어쓸까요?")){
+      statusEl.textContent = "취소됨";
+      return;
+    }
+    var totalSale = r.mallSummary.reduce(function(s,m){return s+m.sale;},0);
+    var totalCost = r.mallSummary.reduce(function(s,m){return s+m.cost;},0);
+    var totalNetIn = r.mallSummary.reduce(function(s,m){return s+m.netIn;},0);
+    data.months[month] = {
+      mallSummary: r.mallSummary,
+      totals: { sale: totalSale, cost: totalCost, profit: totalSale-totalCost, netIn: totalNetIn },
+      savedAt: new Date().toISOString()
+    };
+    await saveDashData(data);
+    statusEl.textContent = "✅ "+month+" 데이터가 대시보드에 저장되었습니다.";
+    dashCache = data;
+    if(document.getElementById("page3").classList.contains("active")) renderDashboard(data);
+  }catch(e){
+    statusEl.textContent = "❌ 저장 실패: "+e.message;
+  }
+});
+
+/* ===================== 대시보드 렌더링 ===================== */
+var dashCache = null;
+var dashCharts = {};
+var dashSelMonth = null;
+
+function destroyChart(key){ if(dashCharts[key]){ dashCharts[key].destroy(); dashCharts[key] = null; } }
+
+async function loadDashboard(){
+  var data = await fetchDashData();
+  dashCache = data;
+  renderDashboard(data);
+}
+
+function monthTotals(monthData){
+  if(monthData.totals) return monthData.totals;
+  var sale = monthData.mallSummary.reduce(function(s,m){return s+m.sale;},0);
+  var cost = monthData.mallSummary.reduce(function(s,m){return s+m.cost;},0);
+  var netIn = monthData.mallSummary.reduce(function(s,m){return s+m.netIn;},0);
+  return {sale:sale, cost:cost, profit:sale-cost, netIn:netIn};
+}
+
+function renderDashboard(data){
+  var months = (data && data.months) ? data.months : {};
+  var sortedMonths = Object.keys(months).sort();
+  var emptyEl = document.getElementById("dashEmpty");
+  var contentEl = document.getElementById("dashContent");
+  document.getElementById("dashUpdatedNote").textContent = sortedMonths.length ? ("저장된 개월 수: "+sortedMonths.length+"개월") : "";
+
+  if(sortedMonths.length===0){
+    emptyEl.style.display = "block";
+    contentEl.style.display = "none";
+    return;
+  }
+  emptyEl.style.display = "none";
+  contentEl.style.display = "block";
+
+  var isDark = document.documentElement.getAttribute("data-theme")==="dark";
+  var gridColor = isDark ? "rgba(255,255,255,.08)" : "rgba(15,23,42,.06)";
+  var tickColor = isDark ? "#a3a3a3" : "#6b7280";
+  if(typeof Chart!=="undefined"){
+    Chart.defaults.color = tickColor;
+    Chart.defaults.borderColor = gridColor;
+  }
+
+  /* KPI */
+  var totalSale = 0, totalCost = 0, totalProfit = 0, totalNetIn = 0;
+  sortedMonths.forEach(function(mo){
+    var t = monthTotals(months[mo]);
+    totalSale += t.sale; totalCost += t.cost; totalProfit += t.profit; totalNetIn += t.netIn;
+  });
+  var lastMonth = sortedMonths[sortedMonths.length-1];
+  var lastT = monthTotals(months[lastMonth]);
+  var kpis = [
+    {label:"누적 총 매출", val:dfmt(totalSale)+" 원", accent:true},
+    {label:"누적 총 매출이익", val:dfmt(totalProfit)+" 원"},
+    {label:"누적 평균 매출이익율", val:(totalSale? (totalProfit/totalSale*100):0).toFixed(1)+" %"},
+    {label:"누적 총 실입금액", val:dfmt(totalNetIn)+" 원"},
+    {label:"최근월("+lastMonth+") 매출", val:dfmt(lastT.sale)+" 원", sub:"저장 "+sortedMonths.length+"개월"}
+  ];
+  document.getElementById("dashKpis").innerHTML = kpis.map(function(k){
+    return '<div class="kpi-card'+(k.accent?' accent':'')+'"><div class="kpi-label">'+k.label+'</div><div class="kpi-val">'+k.val+'</div>'+(k.sub?'<div class="kpi-sub">'+k.sub+'</div>':'')+'</div>';
+  }).join("");
+
+  /* 월 선택 드롭다운 */
+  var monthSel = document.getElementById("dashMonthSel");
+  var prevSel = dashSelMonth && months[dashSelMonth] ? dashSelMonth : lastMonth;
+  monthSel.innerHTML = sortedMonths.map(function(mo){ return '<option value="'+mo+'" '+(mo===prevSel?'selected':'')+'>'+mo+'</option>'; }).join("");
+  dashSelMonth = prevSel;
+  monthSel.onchange = function(){ dashSelMonth = monthSel.value; renderMallDonut(months[dashSelMonth], dashSelMonth); };
+
+  /* 추이 라인차트 */
+  destroyChart("trend");
+  if(typeof Chart!=="undefined"){
+    dashCharts.trend = new Chart(document.getElementById("dashTrendChart"), {
+      type:"line",
+      data:{
+        labels: sortedMonths,
+        datasets:[
+          {label:"매출", data: sortedMonths.map(function(mo){return monthTotals(months[mo]).sale;}), borderColor:"#3b5bfd", backgroundColor:"#3b5bfd18", tension:.35, fill:true, pointRadius:3, borderWidth:2},
+          {label:"매출이익", data: sortedMonths.map(function(mo){return monthTotals(months[mo]).profit;}), borderColor:"#0e9f6e", backgroundColor:"#0e9f6e18", tension:.35, fill:true, pointRadius:3, borderWidth:2}
+        ]
+      },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"top"}}, scales:{ y:{ ticks:{ callback:function(v){ return dfmt(v); } } } } }
+    });
+  }
+
+  /* 몰별 매출 비중 도넛 (선택월) */
+  renderMallDonut(months[dashSelMonth], dashSelMonth);
+
+  /* 몰별 누적 매출이익 Top10 바차트 */
+  var mallTotals = {};
+  sortedMonths.forEach(function(mo){
+    (months[mo].mallSummary||[]).forEach(function(m){
+      if(!mallTotals[m.mall]) mallTotals[m.mall] = 0;
+      mallTotals[m.mall] += m.profit;
+    });
+  });
+  var mallEntries = Object.keys(mallTotals).map(function(k){ return [k, mallTotals[k]]; }).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
+  destroyChart("mallBar");
+  if(typeof Chart!=="undefined"){
+    dashCharts.mallBar = new Chart(document.getElementById("dashMallBar"), {
+      type:"bar",
+      data:{ labels: mallEntries.map(function(e){return e[0];}), datasets:[{ data: mallEntries.map(function(e){return e[1];}), backgroundColor: mallEntries.map(function(e,i){return MALL_COLORS[i%MALL_COLORS.length]+"cc";}), borderRadius:6 }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{ ticks:{ callback:function(v){ return dfmt(v); } } } } }
+    });
+  }
+
+  /* 월별 이력 테이블 */
+  var tbody = document.getElementById("dashHistoryBody");
+  tbody.innerHTML = sortedMonths.slice().reverse().map(function(mo){
+    var t = monthTotals(months[mo]);
+    var rate = t.sale ? (t.profit/t.sale*100) : 0;
+    var savedAt = months[mo].savedAt ? new Date(months[mo].savedAt).toLocaleString("ko-KR") : "-";
+    return '<tr class="month-row"><td>'+mo+'</td><td class="num">'+dfmt(t.sale)+'</td><td class="num">'+dfmt(t.cost)+'</td><td class="num">'+dfmt(t.profit)+'</td><td class="num">'+rate.toFixed(1)+'%</td><td class="num">'+dfmt(t.netIn)+'</td><td>'+savedAt+'</td><td class="actions"><button class="linklike" data-month="'+mo+'">삭제</button></td></tr>';
+  }).join("");
+  tbody.querySelectorAll(".linklike").forEach(function(btn){
+    btn.addEventListener("click", async function(){
+      var mo = btn.getAttribute("data-month");
+      if(!window.confirm(mo+" 데이터를 삭제할까요?")) return;
+      var data = await fetchDashData();
+      if(data && data.months && data.months[mo]){
+        delete data.months[mo];
+        await saveDashData(data);
+        dashCache = data;
+        renderDashboard(data);
+      }
+    });
+  });
+}
+
+function renderMallDonut(monthData, mo){
+  document.getElementById("dashDonutTitle").textContent = "몰별 매출 비중 ("+(mo||"-")+")";
+  destroyChart("donut");
+  if(!monthData || typeof Chart==="undefined") return;
+  var entries = (monthData.mallSummary||[]).map(function(m){ return [m.mall, m.sale]; }).sort(function(a,b){return b[1]-a[1];});
+  dashCharts.donut = new Chart(document.getElementById("dashMallDonut"), {
+    type:"doughnut",
+    data:{ labels: entries.map(function(e){return e[0];}), datasets:[{ data: entries.map(function(e){return e[1];}), backgroundColor: entries.map(function(e,i){return MALL_COLORS[i%MALL_COLORS.length];}), borderWidth:0 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"right", labels:{boxWidth:10, font:{size:11}}}}, cutout:"62%" }
+  });
+}
+
+document.getElementById("dashRefreshBtn").addEventListener("click", loadDashboard);
+document.querySelectorAll(".top-tab[data-page]").forEach(function(t){
+  t.addEventListener("click", function(){
+    if(t.getAttribute("data-page")==="page3") loadDashboard();
+  });
+});
+
+loadDashboard();
 })();
 </script>
 </body>
