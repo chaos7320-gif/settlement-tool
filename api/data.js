@@ -20,7 +20,8 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  // 최신 Vercel Blob은 고정 토큰(BLOB_READ_WRITE_TOKEN) 대신 BLOB_STORE_ID + 자동 OIDC 인증도 지원함
+  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.BLOB_STORE_ID) {
     return res.status(503).json({ error: 'Blob storage not configured' });
   }
 
