@@ -1774,7 +1774,12 @@ async function fetchDashData(){
 }
 async function saveDashData(data){
   var res = await fetch(DASH_API, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data)});
-  if(!res.ok) throw new Error("저장 실패");
+  if(!res.ok){
+    var detail = "";
+    try{ var j = await res.json(); detail = j && j.error ? j.error : ""; }catch(e){}
+    if(res.status===503) throw new Error("Blob 저장소가 설정되지 않았습니다 (Vercel 프로젝트 → Storage 탭에서 Blob 스토어를 연결해주세요).");
+    throw new Error("저장 실패 (HTTP "+res.status+(detail?": "+detail:"")+")");
+  }
   return await res.json();
 }
 
