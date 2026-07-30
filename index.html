@@ -453,7 +453,7 @@ function setupDropzone(zoneId, inputId){
 }
 setupDropzone("settleDropzone", "settleFiles");
 
-var KNOWN_MALLS = ["11번가","롯데온","롯데홈쇼핑","CJ몰","GS SHOP","KREAM","LG라이프케어","SSF","신세계","삼성카드쇼핑","솔드아웃","스마트스토어","에이블리","지그재그","카카오 선물하기","마켓컬리","퀸잇","포이즌","하프클럽","현대홈쇼핑"];
+var KNOWN_MALLS = ["11번가","롯데온","롯데홈쇼핑","CJ몰","GS SHOP","KREAM","LG라이프케어","SSF","신세계","삼성카드쇼핑","솔드아웃","스마트스토어","에이블리","지그재그","카카오 선물하기","마켓컬리","퀸잇","포이즌","하프클럽","현대홈쇼핑","29CM"];
 
 /* 몰별 기본 계산식 프리셋. colIndex는 헤더 이름이 병합되어 못 읽는 경우 위치(0-based)로 지정 */
 var MALL_PRESETS = {
@@ -505,6 +505,14 @@ var MALL_PRESETS = {
     feeAddCols: ["결제 수수료","플랫폼 수수료"],
     netIn: "정산금",
     note: "매출 = 결제금액+배송비+프로모션지원금, 업체수수료 = 결제수수료+플랫폼수수료 (둘 다 더해야 정산금과 정확히 맞습니다)."
+  },
+  "29CM": {
+    sale: "실판매가",
+    fee: "판매수수료",
+    netIn: "정산금액",
+    sellerCoupon: "쿠폰할인액(파트너부담)",
+    mallCoupon: "쿠폰할인액(29CM부담)",
+    note: "'판매가'는 쿠폰 할인 전 정가라 실제 매출과 달라서 '실판매가'를 사용합니다 (정산금액 = 실판매가 − 판매수수료로 정확히 맞아떨어짐을 확인함)."
   }
 };
 function resolvePresetCol(headers, val){
@@ -1176,7 +1184,9 @@ function contains(a,b){
 function sameOption(a,b){
   // 옵션값(사이즈 등)은 부분일치가 아니라 정확히 같아야 함 — "23"이 "230"/"231"의 부분문자열이 되어
   // 다른 사이즈끼리 잘못 매칭되는 것을 방지 (부분일치는 상품명 쪽에서만 허용)
-  return norm(a)===norm(b);
+  // 단, "[사이즈]270 (42)"처럼 몰마다 붙이는 대괄호 라벨은 실제 값과 무관하므로 비교 전에 제거
+  function stripLabel(s){ return String(s).replace(/\[[^\]]*\]/g,""); }
+  return norm(stripLabel(a))===norm(stripLabel(b));
 }
 function saveProfile(key, mapping){ try{ localStorage.setItem(key, JSON.stringify(mapping)); }catch(e){} }
 function loadProfile(key){ try{ var v = localStorage.getItem(key); return v?JSON.parse(v):null; }catch(e){ return null; } }
