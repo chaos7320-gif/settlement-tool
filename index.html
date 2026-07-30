@@ -98,6 +98,20 @@
 .handoff-box{background:var(--accent2);border:1px dashed #b9c5ff;border-radius:10px;padding:14px 16px;margin-bottom:18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
 .theme-toggle{margin-left:auto;margin-right:12px;align-self:center;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:9999px;padding:6px 14px;font-size:12.5px;font-weight:600;cursor:pointer;}
 .theme-toggle:hover{background:rgba(255,255,255,.22);}
+#changelogBtn{position:fixed;top:14px;right:14px;z-index:500;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:9999px;padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.15);}
+#changelogBtn:hover{border-color:var(--accent);}
+#changelogPanel{display:none;position:fixed;top:56px;right:14px;z-index:500;width:340px;max-width:calc(100vw - 28px);max-height:70vh;overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.25);padding:14px 16px;}
+#changelogPanel.open{display:block;}
+.changelog-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.changelog-head b{font-size:13.5px;color:var(--text);}
+.changelog-head a{font-size:11px;color:var(--sub);text-decoration:none;}
+.changelog-head a:hover{text-decoration:underline;}
+.changelog-item{padding:8px 0;border-bottom:1px solid var(--border);}
+.changelog-item:last-child{border-bottom:none;}
+.changelog-date{font-size:11px;color:var(--sub);margin-bottom:2px;}
+.changelog-msg{font-size:12.5px;color:var(--text);text-decoration:none;font-weight:600;display:block;}
+.changelog-msg:hover{text-decoration:underline;}
+.changelog-body{font-size:11.5px;color:var(--sub);margin-top:3px;white-space:pre-line;}
 .dash-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
 .kpi-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:20px;}
 @media (max-width:900px){.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
@@ -122,6 +136,14 @@
 </style>
 </head>
 <body>
+<button id="changelogBtn" type="button">📋 업데이트 로그</button>
+<div id="changelogPanel">
+  <div class="changelog-head">
+    <b>📋 업데이트 로그</b>
+    <a href="https://github.com/chaos7320-gif/settlement-tool/commits/main" target="_blank" rel="noopener">GitHub에서 전체 보기 ↗</a>
+  </div>
+  <div id="changelogList" class="footer-note">불러오는 중...</div>
+</div>
 <header>
   <h1>🧩🧮 정산 표준화 &amp; ERP 매칭·손익계산</h1>
   <p>1단계에서 정산서를 표준화하고, 2단계에서 ERP와 매칭해 손익을 계산합니다.</p>
@@ -1922,6 +1944,62 @@ document.querySelectorAll(".top-tab[data-page]").forEach(function(t){
 });
 
 loadDashboard();
+})();
+</script>
+
+<script>
+(function(){
+function esc(s){ return (s===undefined||s===null) ? "" : String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+var REPO = "chaos7320-gif/settlement-tool";
+var btn = document.getElementById("changelogBtn");
+var panel = document.getElementById("changelogPanel");
+var listEl = document.getElementById("changelogList");
+var loaded = false;
+
+function fmtDate(iso){
+  var d = new Date(iso);
+  if(isNaN(d)) return iso;
+  return d.toLocaleString("ko-KR", {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
+}
+
+async function loadChangelog(){
+  listEl.textContent = "불러오는 중...";
+  try{
+    var res = await fetch("https://api.github.com/repos/"+REPO+"/commits?per_page=20", {cache:"no-store"});
+    if(!res.ok){
+      listEl.textContent = res.status===403 ? "⚠️ GitHub API 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요." : "⚠️ 로그를 불러오지 못했습니다. (HTTP "+res.status+")";
+      return;
+    }
+    var commits = await res.json();
+    if(!Array.isArray(commits) || commits.length===0){ listEl.textContent = "표시할 로그가 없습니다."; return; }
+    listEl.innerHTML = commits.map(function(c){
+      var msgLines = (c.commit && c.commit.message ? c.commit.message : "").split("\n").filter(function(l){ return l.trim() !== "" && l.indexOf("Co-Authored-By") === -1; });
+      var title = msgLines[0] || "(제목 없음)";
+      var body = msgLines.slice(1).join("\n");
+      var date = c.commit && c.commit.author ? c.commit.author.date : "";
+      var url = c.html_url || ("https://github.com/"+REPO+"/commit/"+c.sha);
+      return '<div class="changelog-item">'+
+        '<div class="changelog-date">'+esc(fmtDate(date))+'</div>'+
+        '<a class="changelog-msg" href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(title)+'</a>'+
+        (body ? '<div class="changelog-body">'+esc(body)+'</div>' : '')+
+        '</div>';
+    }).join("");
+    loaded = true;
+  }catch(e){
+    listEl.textContent = "⚠️ 로그를 불러오지 못했습니다 (네트워크 오류).";
+  }
+}
+
+btn.addEventListener("click", function(){
+  var willOpen = !panel.classList.contains("open");
+  panel.classList.toggle("open", willOpen);
+  if(willOpen && !loaded) loadChangelog();
+});
+document.addEventListener("click", function(e){
+  if(panel.classList.contains("open") && !panel.contains(e.target) && e.target!==btn){
+    panel.classList.remove("open");
+  }
+});
 })();
 </script>
 </body>
