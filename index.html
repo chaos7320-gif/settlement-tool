@@ -154,6 +154,7 @@
       <div class="dz-text"><b>클릭하거나</b> 여러 정산서 파일을 이 위로 끌어다 놓으세요 (xlsx, xls, csv)</div>
       <input type="file" id="settleFiles" accept=".xlsx,.xls,.csv" multiple>
     </div>
+    <button class="btn gray" id="settleResetAllBtn" type="button" style="display:none;margin-top:10px;">🗑 업로드한 파일 전체 초기화</button>
     <div id="settleNav" style="display:none;margin-top:10px;" class="flex"></div>
     <div id="settleMapArea" style="margin-top:14px;"></div>
   </div>
@@ -552,11 +553,22 @@ function checkReady(){
 }
 
 /* ===================== 파일 업로드 & 단계별 카드 ===================== */
+document.getElementById("settleResetAllBtn").addEventListener("click", function(){
+  if(!window.confirm("업로드한 정산서 파일을 모두 초기화할까요?")) return;
+  state.settleFiles = [];
+  document.getElementById("settleFiles").value = "";
+  document.getElementById("settleMapArea").innerHTML = "";
+  document.getElementById("settleNav").style.display = "none";
+  document.getElementById("settleNav").innerHTML = "";
+  document.getElementById("settleResetAllBtn").style.display = "none";
+  checkReady();
+});
 document.getElementById("settleFiles").addEventListener("change", function(e){
   var files = Array.from(e.target.files);
   var area = document.getElementById("settleMapArea");
   area.innerHTML = "";
   state.settleFiles = [];
+  document.getElementById("settleResetAllBtn").style.display = files.length>0 ? "inline-block" : "none";
   var cardsArr = [];
   var currentIdx = 0;
 
