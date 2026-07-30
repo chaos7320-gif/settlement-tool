@@ -330,6 +330,7 @@ function toNum(v){
   return isNaN(n) ? 0 : n;
 }
 function fmt(n){ return Math.round(n).toLocaleString("ko-KR"); }
+function esc(s){ return (s===undefined||s===null) ? "" : String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function excelDateToStr(v){
   if(v===undefined||v===null||v==="") return "";
   if(typeof v === "number"){
@@ -522,7 +523,7 @@ function renderMapping(container, headers, fields, savedMapping, onChange){
     html += '<div class="map-item '+(f.required?'required':'')+'"><label>'+f.label+(f.required?' *':'')+'</label>';
     html += '<select data-field="'+f.key+'" class="mapSel"><option value="">(사용안함)</option>';
     headers.forEach(function(h){
-      html += '<option value="'+h.replace(/"/g,'&quot;')+'" '+(h===guessed?'selected':'')+'>'+h+'</option>';
+      html += '<option value="'+h.replace(/"/g,'&quot;')+'" '+(h===guessed?'selected':'')+'>'+esc(h)+'</option>';
     });
     html += '</select></div>';
   });
@@ -563,7 +564,7 @@ document.getElementById("settleFiles").addEventListener("change", function(e){
     nav.style.display = "flex";
     nav.innerHTML =
       '<button class="btn gray" id="settlePrevBtn">◀ 이전</button>'+
-      '<span style="font-weight:600;">파일 '+(currentIdx+1)+' / '+cardsArr.length+' — '+ (state.settleFiles[currentIdx] ? state.settleFiles[currentIdx].mallName : "") +'</span>'+
+      '<span style="font-weight:600;">파일 '+(currentIdx+1)+' / '+cardsArr.length+' — '+ (state.settleFiles[currentIdx] ? esc(state.settleFiles[currentIdx].mallName) : "") +'</span>'+
       '<button class="btn gray" id="settleNextBtn">다음 ▶</button>'+
       '<span class="footer-note">(매핑은 파일마다 자동 저장되니, 넘겨도 유지됩니다)</span>';
     cardsArr.forEach(function(c, i){ c.style.display = (i===currentIdx) ? "block" : "none"; });
@@ -637,21 +638,25 @@ document.getElementById("settleFiles").addEventListener("change", function(e){
             var savedKey = entry.joinKeys[gi] && g.headers.indexOf(entry.joinKeys[gi])>-1 ? entry.joinKeys[gi] : guessKey;
             entry.joinKeys[gi] = savedKey;
             joinHtml += '<div class="flex" style="margin-bottom:6px;font-size:12.5px;">'+
-              '<span>['+g.sheets.join(", ")+'] ('+g.rows.length+'행) 연결키:</span>'+
+              '<span>['+esc(g.sheets.join(", "))+'] ('+g.rows.length+'행) 연결키:</span>'+
               '<select class="txt joinKeySel" data-gi="'+gi+'">'+
-                g.headers.map(function(h){ return '<option value="'+h.replace(/"/g,'&quot;')+'" '+(h===savedKey?'selected':'')+'>'+h+'</option>'; }).join("")+
+                g.headers.map(function(h){ return '<option value="'+h.replace(/"/g,'&quot;')+'" '+(h===savedKey?'selected':'')+'>'+esc(h)+'</option>'; }).join("")+
               '</select></div>';
           });
           // 조인 수행: 행이 가장 많은 그룹을 베이스로, 나머지 그룹을 lookup으로 병합
           var base = groupData[0];
           var baseKey = entry.joinKeys[0];
+          var joinDupTotal = 0;
           var lookups = groupData.slice(1).map(function(g, idx){
             var gi = idx+1;
             var key = entry.joinKeys[gi];
             var dict = {};
-            g.rows.forEach(function(r){ var k = norm(r[key]); if(!(k in dict)) dict[k] = r; });
+            g.rows.forEach(function(r){ var k = norm(r[key]); if(k in dict) joinDupTotal++; else dict[k] = r; });
             return dict;
           });
+          if(joinDupTotal>0){
+            joinHtml += '<div class="footer-note" style="color:var(--bad);">⚠️ 연결키가 중복된 행 '+joinDupTotal+'건은 병합 시 첫 번째 행만 사용되고 나머지는 무시됩니다. 연결키 컬럼이 맞는지 확인해주세요.</div>';
+          }
           var mergedRows = base.rows.map(function(r){
             var out = Object.assign({}, r);
             lookups.forEach(function(dict){
@@ -672,19 +677,19 @@ document.getElementById("settleFiles").addEventListener("change", function(e){
         if(wbRes.sheetNames.length>1){
           sheetSelectHtml = '<div class="footer-note" style="margin:6px 0;">합칠 시트 선택 (구조가 같은 시트는 자동으로 같이 체크됩니다 — 2주 단위로 탭이 나뉜 경우 등):</div><div class="flex" style="margin-bottom:6px;">'+
             wbRes.sheetNames.map(function(n){
-              return '<label class="flex" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;"><input type="checkbox" class="sheetChk" value="'+n+'" '+(selectedNames.indexOf(n)>-1?'checked':'')+' style="width:auto;">'+n+' ('+wbRes.sheetsRaw[n].length+'행)</label>';
+              return '<label class="flex" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;"><input type="checkbox" class="sheetChk" value="'+n.replace(/"/g,'&quot;')+'" '+(selectedNames.indexOf(n)>-1?'checked':'')+' style="width:auto;">'+esc(n)+' ('+wbRes.sheetsRaw[n].length+'행)</label>';
             }).join("")+
             '</div>'+joinHtml;
         }
         card.innerHTML =
           '<div class="mhead">'+
-            '<span class="name">📄 '+wbRes.fileName+' · '+parsed.rows.length+'행</span>'+
+            '<span class="name">📄 '+esc(wbRes.fileName)+' · '+parsed.rows.length+'행</span>'+
             '<span class="flex">몰 이름: '+
               '<select class="txt mallNameSel">'+
                 KNOWN_MALLS.map(function(mn){ return '<option value="'+mn+'">'+mn+'</option>'; }).join("")+
                 '<option value="__custom__">직접입력...</option>'+
               '</select>'+
-              '<input type="text" class="txt mallNameInput" value="'+guessMallName+'" style="width:120px;display:none;">'+
+              '<input type="text" class="txt mallNameInput" value="'+esc(guessMallName)+'" style="width:120px;display:none;">'+
             '</span>'+
           '</div>'+
           sheetSelectHtml+
@@ -732,7 +737,7 @@ document.getElementById("settleFiles").addEventListener("change", function(e){
           feeRateArea.innerHTML =
             '<div class="map-grid" style="margin-top:6px;">'+
               '<div class="map-item"><label>수수료율 컬럼</label><select class="txt feeRateColSel">'+
-                numHeaders.map(function(h){ return '<option value="'+h.replace(/"/g,'&quot;')+'" '+(h===entry.mapping.feeRateCol?'selected':'')+'>'+h+'</option>'; }).join("")+
+                numHeaders.map(function(h){ return '<option value="'+h.replace(/"/g,'&quot;')+'" '+(h===entry.mapping.feeRateCol?'selected':'')+'>'+esc(h)+'</option>'; }).join("")+
               '</select></div>'+
               '<div class="map-item"><label>값 형식</label><select class="txt feeRateFormatSel">'+
                 '<option value="percent" '+(entry.mapping.feeRatePercent!==false?'selected':'')+'>퍼센트 숫자 (예: 9 → 9%)</option>'+
@@ -750,6 +755,10 @@ document.getElementById("settleFiles").addEventListener("change", function(e){
             var numHeaders = getNumericHeaders(parsed.headers, entry.rows);
             entry.mapping.feeRateCol = entry.mapping.feeRateCol || guessColumn(parsed.headers,["수수료율","수수료 율"]) || numHeaders[0];
             if(entry.mapping.feeRatePercent===undefined) entry.mapping.feeRatePercent = true;
+            if((entry.mapping.feeAddCols && entry.mapping.feeAddCols.length) || (entry.mapping.feeSubCols && entry.mapping.feeSubCols.length)){
+              entry.mapping.feeAddCols = null; entry.mapping.feeSubCols = null;
+              renderCompose("fee","업체수수료");
+            }
           } else {
             entry.mapping.feeRateCol = null;
           }
@@ -763,7 +772,7 @@ document.getElementById("settleFiles").addEventListener("change", function(e){
         function renderManualAdj(){
           if(entry.manualAdjustments.length===0){ manualAdjArea.innerHTML = '<span class="footer-note">추가된 항목 없음</span>'; return; }
           manualAdjArea.innerHTML = entry.manualAdjustments.map(function(item, i){
-            return '<span class="pill" style="margin-right:6px;">'+item.label+' '+fmt(item.amount)+'원 <a href="#" data-idx="'+i+'" class="removeAdjBtn" style="color:var(--bad);text-decoration:none;margin-left:4px;">✕</a></span>';
+            return '<span class="pill" style="margin-right:6px;">'+esc(item.label)+' '+fmt(item.amount)+'원 <a href="#" data-idx="'+i+'" class="removeAdjBtn" style="color:var(--bad);text-decoration:none;margin-left:4px;">✕</a></span>';
           }).join("");
           manualAdjArea.querySelectorAll(".removeAdjBtn").forEach(function(a){
             a.addEventListener("click", function(ev){ ev.preventDefault(); entry.manualAdjustments.splice(Number(a.getAttribute("data-idx")),1); renderManualAdj(); });
@@ -792,9 +801,9 @@ document.getElementById("settleFiles").addEventListener("change", function(e){
             if(baseSel){ baseSel.disabled = !!active; baseSel.style.opacity = active ? "0.4" : "1"; }
             var html = '<div class="footer-note" style="margin-top:8px;"><label class="flex" style="font-size:12.5px;"><input type="checkbox" class="composeToggle" '+(active?'checked':'')+' style="width:auto;"> '+label+'을(를) 여러 컬럼으로 계산해요 (더하기/빼기) — 켜면 위 단일선택은 무시됩니다</label></div><div class="composeBody" style="'+(active?'':'display:none;')+'">'+
               '<div class="footer-note">➕ 더할 항목 (원본 부호 그대로 더해집니다 — 음수 컬럼을 여기 넣으면 결과가 줄어듭니다)</div><div class="map-grid">'+
-              numHeaders.map(function(h){ return '<label class="flex" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;"><input type="checkbox" class="addChk" value="'+h.replace(/"/g,'&quot;')+'" '+(addArr.indexOf(h)>-1?'checked':'')+' style="width:auto;">'+h+'</label>'; }).join("")+
+              numHeaders.map(function(h){ return '<label class="flex" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;"><input type="checkbox" class="addChk" value="'+h.replace(/"/g,'&quot;')+'" '+(addArr.indexOf(h)>-1?'checked':'')+' style="width:auto;">'+esc(h)+'</label>'; }).join("")+
               '</div><div class="footer-note" style="margin-top:6px;">➖ 뺄 항목 (원본 부호 그대로 빼집니다 — 음수 컬럼을 여기 넣으면 결과가 커집니다)</div><div class="map-grid">'+
-              numHeaders.map(function(h){ return '<label class="flex" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;"><input type="checkbox" class="subChk" value="'+h.replace(/"/g,'&quot;')+'" '+(subArr.indexOf(h)>-1?'checked':'')+' style="width:auto;">'+h+'</label>'; }).join("")+
+              numHeaders.map(function(h){ return '<label class="flex" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;"><input type="checkbox" class="subChk" value="'+h.replace(/"/g,'&quot;')+'" '+(subArr.indexOf(h)>-1?'checked':'')+' style="width:auto;">'+esc(h)+'</label>'; }).join("")+
               '</div></div>';
             area.innerHTML = html;
             var body = area.querySelector(".composeBody");
@@ -802,7 +811,10 @@ document.getElementById("settleFiles").addEventListener("change", function(e){
               body.style.display = ev.target.checked ? "block" : "none";
               if(baseSel){ baseSel.disabled = ev.target.checked; baseSel.style.opacity = ev.target.checked ? "0.4" : "1"; }
               if(!ev.target.checked){ entry.mapping[addKey]=null; entry.mapping[subKey]=null; checkReady(); }
-              else { collect(); }
+              else {
+                if(key==="fee" && entry.mapping.feeRateCol){ entry.mapping.feeRateCol = null; renderFeeRateArea(); }
+                collect();
+              }
             });
             function collect(){
               entry.mapping[addKey] = Array.from(area.querySelectorAll(".addChk:checked")).map(function(c){return c.value;});
@@ -892,7 +904,7 @@ document.getElementById("settleFiles").addEventListener("change", function(e){
           if(ev.target.checked){
             var html = '<div class="footer-note" style="margin-bottom:4px;">실입금액에 합산할 컬럼을 모두 체크하세요 (수수료 등 차감 항목은 원본 값이 음수면 자동 반영됩니다) — 숫자형 컬럼만 표시됩니다</div><div class="map-grid">';
             getNumericHeaders(parsed.headers, entry.rows).forEach(function(h){
-              html += '<label class="flex" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;"><input type="checkbox" class="sumColChk" value="'+h.replace(/"/g,'&quot;')+'" style="width:auto;">'+h+'</label>';
+              html += '<label class="flex" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;"><input type="checkbox" class="sumColChk" value="'+h.replace(/"/g,'&quot;')+'" style="width:auto;">'+esc(h)+'</label>';
             });
             html += '</div>';
             sumColsArea.innerHTML = html;
@@ -1035,7 +1047,7 @@ function renderResult(){
     ["총 실입금액", fmt(totalNetIn)+" 원"]
   ].map(function(x){ return '<div class="sum-box"><div class="lbl">'+x[0]+'</div><div class="val">'+x[1]+'</div></div>'; }).join("")
    + Object.keys(mallSet).sort().map(function(mn){
-      return '<div class="sum-box"><div class="lbl">'+mn+'</div><div class="val">'+mallSet[mn].toLocaleString()+' 행</div></div>';
+      return '<div class="sum-box"><div class="lbl">'+esc(mn)+'</div><div class="val">'+mallSet[mn].toLocaleString()+' 행</div></div>';
     }).join("");
 
   var cols = ["몰","주문번호","상품명","옵션값","수량","매출","업체수수료","수수료율","업체부담쿠폰","몰부담쿠폰","실입금액","수수료계산방식"];
@@ -1045,7 +1057,7 @@ function renderResult(){
     html += '<tr>'+cols.map(function(c){
       var v = r[c];
       var isNum = ["수량","매출","업체수수료","수수료율","업체부담쿠폰","몰부담쿠폰","실입금액"].indexOf(c)>-1;
-      return '<td class="'+(isNum?"num":"")+'">'+(v===""||v===undefined? "" : (isNum && typeof v==="number" ? fmt(v) : v))+'</td>';
+      return '<td class="'+(isNum?"num":"")+'">'+(v===""||v===undefined? "" : (isNum && typeof v==="number" ? fmt(v) : esc(v)))+'</td>';
     }).join("")+'</tr>';
   });
   var totals = {};
@@ -1091,6 +1103,7 @@ function toNum(v){
   return isNaN(n) ? 0 : n;
 }
 function fmt(n){ return Math.round(n).toLocaleString("ko-KR"); }
+function esc(s){ return (s===undefined||s===null) ? "" : String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function excelDateToStr(v){
   if(v===undefined||v===null||v==="") return "";
   if(typeof v === "number"){
@@ -1113,6 +1126,11 @@ function contains(a,b){
   var sa = String(a).replace(/\s/g,"");
   var sb = String(b).replace(/\s/g,"");
   return sa.indexOf(sb)>-1 || sb.indexOf(sa)>-1;
+}
+function sameOption(a,b){
+  // 옵션값(사이즈 등)은 부분일치가 아니라 정확히 같아야 함 — "23"이 "230"/"231"의 부분문자열이 되어
+  // 다른 사이즈끼리 잘못 매칭되는 것을 방지 (부분일치는 상품명 쪽에서만 허용)
+  return norm(a)===norm(b);
 }
 function saveProfile(key, mapping){ try{ localStorage.setItem(key, JSON.stringify(mapping)); }catch(e){} }
 function loadProfile(key){ try{ var v = localStorage.getItem(key); return v?JSON.parse(v):null; }catch(e){ return null; } }
@@ -1205,7 +1223,7 @@ function renderMapping(container, headers, fields, savedMapping, onChange){
     html += '<div class="map-item '+(f.required?'required':'')+'"><label>'+f.label+(f.required?' *':'')+'</label>';
     html += '<select data-field="'+f.key+'" class="mapSel"><option value="">(사용안함)</option>';
     headers.forEach(function(h){
-      html += '<option value="'+h.replace(/"/g,'&quot;')+'" '+(h===guessed?'selected':'')+'>'+h+'</option>';
+      html += '<option value="'+h.replace(/"/g,'&quot;')+'" '+(h===guessed?'selected':'')+'>'+esc(h)+'</option>';
     });
     html += '</select></div>';
   });
@@ -1254,7 +1272,7 @@ function renderMallPreview(){
   html += '<label class="flex" style="margin-bottom:8px;font-size:13px;"><input type="checkbox" id="mallParseToggle" '+(enabled?'checked':'')+' style="width:auto;"> 정제 규칙 사용: 콜론(:) 뒤 텍스트 + 괄호() 내용 제거</label>';
   html += '<div class="scrollbox" style="max-height:220px;"><table><thead><tr><th>원본 값</th><th class="num">건수</th><th>정제 결과 → 매칭용 몰 이름</th></tr></thead><tbody>';
   keys.slice(0,50).forEach(function(k){
-    html += '<tr><td>'+k+'</td><td class="num">'+counts[k]+'</td><td><b>'+parseMallName(k, enabled)+'</b></td></tr>';
+    html += '<tr><td>'+esc(k)+'</td><td class="num">'+counts[k]+'</td><td><b>'+esc(parseMallName(k, enabled))+'</b></td></tr>';
   });
   html += '</tbody></table></div>';
   area.innerHTML = html;
@@ -1273,10 +1291,10 @@ document.getElementById("erpFile").addEventListener("change", function(e){
       var sheetSelectHtml = "";
       if(wbRes.sheetNames.length>1){
         sheetSelectHtml = '<div class="footer-note" style="margin-bottom:8px;">시트 선택: <select id="erpSheetSel">'+
-          wbRes.sheetNames.map(function(n){ return '<option value="'+n+'" '+(n===sheetName?'selected':'')+'>'+n+' ('+wbRes.sheetsRaw[n].length+'행)</option>'; }).join("")+
+          wbRes.sheetNames.map(function(n){ return '<option value="'+n.replace(/"/g,'&quot;')+'" '+(n===sheetName?'selected':'')+'>'+esc(n)+' ('+wbRes.sheetsRaw[n].length+'행)</option>'; }).join("")+
           '</select></div>';
       }
-      area.innerHTML = sheetSelectHtml + '<div class="footer-note" style="margin-bottom:8px;">'+wbRes.fileName+' · '+parsed.rows.length+'행 인식됨</div><div id="erpMapInner"></div>';
+      area.innerHTML = sheetSelectHtml + '<div class="footer-note" style="margin-bottom:8px;">'+esc(wbRes.fileName)+' · '+parsed.rows.length+'행 인식됨</div><div id="erpMapInner"></div>';
       renderMapping(document.getElementById("erpMapInner"), parsed.headers, ERP_FIELDS, saved, function(mapping){
         state.erp = {headers:parsed.headers, rows:parsed.rows, mapping:mapping};
         saveProfile("erpMappingProfile_s2", mapping);
@@ -1392,7 +1410,7 @@ function runMatching(){
       remErp = remErp.filter(function(e){
         var idx = remStd.findIndex(function(s){
           return e.productName && s.productName && contains(e.productName,s.productName) &&
-                 e.optionValue && s.optionValue && contains(e.optionValue,s.optionValue);
+                 e.optionValue && s.optionValue && sameOption(e.optionValue,s.optionValue);
         });
         if(idx>-1){ matched.push({erp:e, std:remStd[idx], matchType:"완전매칭"}); remStd.splice(idx,1); return false; }
         return true;
@@ -1423,7 +1441,7 @@ function runMatching(){
     var idx = remainingStdLines.findIndex(function(s){
       if(s._used || s.mall !== e.mall) return false;
       var nameOk = (!e.productName || !s.productName) ? true : contains(e.productName, s.productName);
-      var optOk = (!e.optionValue || !s.optionValue) ? true : contains(e.optionValue, s.optionValue);
+      var optOk = (!e.optionValue || !s.optionValue) ? true : sameOption(e.optionValue, s.optionValue);
       var target = e.sale || e.cost || 1;
       var amtOk = Math.abs(s.sale - e.sale) <= Math.max(target*tolPct, 1);
       return nameOk && optOk && amtOk;
@@ -1545,35 +1563,35 @@ function renderTab(tab){
   if(tab==="mallSummary"){
     html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th class="num">매칭건수</th><th class="num">매출</th><th class="num">매출(-VAT)</th><th class="num">매출원가</th><th class="num">매출원가(-VAT)</th><th class="num">매출이익</th><th class="num">매출이익(-VAT)</th><th class="num">매출이익율</th><th class="num">수수료</th><th class="num">수수료(-VAT)</th><th class="num">수수료율</th><th class="num">판매입금액</th><th class="num">공제금액</th><th class="num">공제금액(-VAT)</th><th class="num">공제금액차감후입금액</th><th class="num">실입금액</th></tr></thead><tbody>';
     r.mallSummary.forEach(function(m){
-      html += '<tr><td>'+m.mall+'</td><td class="num">'+m.count+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.saleExVat)+'</td><td class="num">'+fmt(m.cost)+'</td><td class="num">'+fmt(m.costExVat)+'</td><td class="num">'+fmt(m.profit)+'</td><td class="num">'+fmt(m.profitExVat)+'</td><td class="num">'+(m.profitRate*100).toFixed(1)+'%</td><td class="num">'+fmt(m.fee)+'</td><td class="num">'+fmt(m.feeExVat)+'</td><td class="num">'+(m.feeRate*100).toFixed(1)+'%</td><td class="num">'+fmt(m.netSaleIn)+'</td><td class="num">'+fmt(m.deduction)+'</td><td class="num">'+fmt(m.deductionExVat)+'</td><td class="num">'+fmt(m.afterDeduction)+'</td><td class="num">'+fmt(m.netIn)+'</td></tr>';
+      html += '<tr><td>'+esc(m.mall)+'</td><td class="num">'+m.count+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.saleExVat)+'</td><td class="num">'+fmt(m.cost)+'</td><td class="num">'+fmt(m.costExVat)+'</td><td class="num">'+fmt(m.profit)+'</td><td class="num">'+fmt(m.profitExVat)+'</td><td class="num">'+(m.profitRate*100).toFixed(1)+'%</td><td class="num">'+fmt(m.fee)+'</td><td class="num">'+fmt(m.feeExVat)+'</td><td class="num">'+(m.feeRate*100).toFixed(1)+'%</td><td class="num">'+fmt(m.netSaleIn)+'</td><td class="num">'+fmt(m.deduction)+'</td><td class="num">'+fmt(m.deductionExVat)+'</td><td class="num">'+fmt(m.afterDeduction)+'</td><td class="num">'+fmt(m.netIn)+'</td></tr>';
     });
     html += '</tbody></table></div>';
   } else if(tab==="matched"){
     html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th>주문번호</th><th>매칭방식</th><th>상품명</th><th class="num">매출</th><th class="num">매출원가</th><th class="num">매출이익</th><th class="num">이익율</th><th class="num">실입금액</th></tr></thead><tbody>';
     if(r.matched.length===0) html += '<tr><td colspan="9" class="empty">매칭된 건이 없습니다</td></tr>';
     r.matched.forEach(function(m){
-      html += '<tr><td>'+m.erp.mall+'</td><td>'+m.erp.orderNo+'</td><td><span class="pill '+m.quality+'">'+m.matchType+'</span></td><td>'+(m.erp.productName||m.std.productName||"")+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.cost)+'</td><td class="num">'+fmt(m.profit)+'</td><td class="num">'+m.margin.toFixed(1)+'%</td><td class="num">'+fmt(m.std.netIn)+'</td></tr>';
+      html += '<tr><td>'+esc(m.erp.mall)+'</td><td>'+esc(m.erp.orderNo)+'</td><td><span class="pill '+m.quality+'">'+m.matchType+'</span></td><td>'+esc(m.erp.productName||m.std.productName||"")+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.cost)+'</td><td class="num">'+fmt(m.profit)+'</td><td class="num">'+m.margin.toFixed(1)+'%</td><td class="num">'+fmt(m.std.netIn)+'</td></tr>';
     });
     html += '</tbody></table></div>';
   } else if(tab==="erpOnly"){
     html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th>주문번호</th><th>상품명</th><th class="num">매출</th><th class="num">원가</th><th>날짜</th></tr></thead><tbody>';
     if(r.erpOnly.length===0) html += '<tr><td colspan="6" class="empty">미매칭 건이 없습니다</td></tr>';
     r.erpOnly.forEach(function(m){
-      html += '<tr><td>'+m.mall+'</td><td>'+m.orderNo+'</td><td>'+m.productName+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.cost)+'</td><td>'+m.date+'</td></tr>';
+      html += '<tr><td>'+esc(m.mall)+'</td><td>'+esc(m.orderNo)+'</td><td>'+esc(m.productName)+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.cost)+'</td><td>'+esc(m.date)+'</td></tr>';
     });
     html += '</tbody></table></div>';
   } else if(tab==="stdOnly"){
     html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th>주문번호</th><th>상품명</th><th class="num">매출</th><th class="num">실입금액</th><th>날짜</th></tr></thead><tbody>';
     if(r.stdOnly.length===0) html += '<tr><td colspan="6" class="empty">미매칭 건이 없습니다</td></tr>';
     r.stdOnly.forEach(function(m){
-      html += '<tr><td>'+m.mall+'</td><td>'+m.orderNo+'</td><td>'+m.productName+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.netIn)+'</td><td>'+m.date+'</td></tr>';
+      html += '<tr><td>'+esc(m.mall)+'</td><td>'+esc(m.orderNo)+'</td><td>'+esc(m.productName)+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.netIn)+'</td><td>'+esc(m.date)+'</td></tr>';
     });
     html += '</tbody></table></div>';
   } else if(tab==="flags"){
     html += '<div class="scrollbox"><table><thead><tr><th>유형</th><th>몰</th><th>주문번호</th><th>상세</th></tr></thead><tbody>';
     if(r.flags.length===0) html += '<tr><td colspan="4" class="empty">발견된 이상치가 없습니다</td></tr>';
     r.flags.forEach(function(f){
-      html += '<tr class="row-flag"><td><span class="pill bad">'+f.type+'</span></td><td>'+f.mall+'</td><td>'+f.orderNo+'</td><td>'+f.detail+'</td></tr>';
+      html += '<tr class="row-flag"><td><span class="pill bad">'+f.type+'</span></td><td>'+esc(f.mall)+'</td><td>'+esc(f.orderNo)+'</td><td>'+f.detail+'</td></tr>';
     });
     html += '</tbody></table></div>';
   }
