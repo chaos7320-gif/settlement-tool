@@ -201,6 +201,7 @@
       <div class="dz-text"><b>클릭하거나</b> ERP 파일을 이 위로 끌어다 놓으세요</div>
       <input type="file" id="erpFile" accept=".xlsx,.xls,.csv">
     </div>
+    <button class="btn gray" id="erpResetBtn" type="button" style="display:none;margin-top:8px;">🔄 이 파일 초기화</button>
     <div id="erpMapArea" style="margin-top:14px;"></div>
     <div id="erpMallPreviewArea"></div>
   </div>
@@ -213,6 +214,7 @@
       <div class="dz-text"><b>클릭하거나</b> 표준정산_통합 파일을 이 위로 끌어다 놓으세요</div>
       <input type="file" id="stdFile" accept=".xlsx,.xls,.csv">
     </div>
+    <button class="btn gray" id="stdResetBtn" type="button" style="display:none;margin-top:8px;">🔄 이 파일 초기화</button>
     <div id="stdStatus" class="footer-note" style="margin-top:8px;"></div>
   </div>
 
@@ -691,6 +693,7 @@ document.getElementById("settleFiles").addEventListener("change", function(e){
               '</select>'+
               '<input type="text" class="txt mallNameInput" value="'+esc(guessMallName)+'" style="width:120px;display:none;">'+
             '</span>'+
+            '<button class="btn gray removeFileBtn" type="button" style="font-size:11.5px;padding:4px 10px;">🗑 이 파일 초기화</button>'+
           '</div>'+
           sheetSelectHtml+
           '<div id="presetNote" class="footer-note" style="color:var(--accent);"></div>'+
@@ -897,6 +900,15 @@ document.getElementById("settleFiles").addEventListener("change", function(e){
           var currentMall = mallSel.value === "__custom__" ? (mallTxt.value.trim() || guessMallName) : mallSel.value;
           localStorage.removeItem("mallMappingProfile_std_"+currentMall);
           doMap(currentMall);
+        });
+        card.querySelector(".removeFileBtn").addEventListener("click", function(){
+          if(!window.confirm("이 파일("+guessMallName+")을 목록에서 제거할까요?")) return;
+          var idx = cardsArr.indexOf(card);
+          if(idx>-1){ cardsArr.splice(idx,1); state.settleFiles.splice(idx,1); }
+          card.remove();
+          if(currentIdx>=cardsArr.length) currentIdx = Math.max(0,cardsArr.length-1);
+          updateNav();
+          checkReady();
         });
 
         var sumColsArea = card.querySelector(".sumColsArea");
@@ -1306,7 +1318,17 @@ document.getElementById("erpFile").addEventListener("change", function(e){
       }
     }
     renderForSheet(defaultSheet);
+    document.getElementById("erpResetBtn").style.display = "inline-block";
   });
+});
+
+document.getElementById("erpResetBtn").addEventListener("click", function(){
+  state.erp = null;
+  document.getElementById("erpFile").value = "";
+  document.getElementById("erpMapArea").innerHTML = "";
+  document.getElementById("erpMallPreviewArea").innerHTML = "";
+  document.getElementById("erpResetBtn").style.display = "none";
+  checkReady();
 });
 
 document.getElementById("stdFile").addEventListener("change", function(e){
@@ -1317,8 +1339,17 @@ document.getElementById("stdFile").addEventListener("change", function(e){
     var parsed = parseSheetRows(wbRes.sheetsRaw[sheetName]);
     state.std = {rows:parsed.rows};
     document.getElementById("stdStatus").textContent = "✅ "+wbRes.fileName+" · "+parsed.rows.length+"행 로드됨 (몰 "+(new Set(parsed.rows.map(function(r){return r["몰"];}))).size+"개)";
+    document.getElementById("stdResetBtn").style.display = "inline-block";
     checkReady();
   });
+});
+
+document.getElementById("stdResetBtn").addEventListener("click", function(){
+  state.std = null;
+  document.getElementById("stdFile").value = "";
+  document.getElementById("stdStatus").textContent = "";
+  document.getElementById("stdResetBtn").style.display = "none";
+  checkReady();
 });
 
 function checkReady(){
@@ -1645,6 +1676,7 @@ document.getElementById("handoffBtn").addEventListener("click", function(){
   if(!rows || rows.length===0){ statusEl.textContent = "⚠️ 1단계에서 먼저 '표준화 변환 실행'을 완료해주세요."; return; }
   state.std = {rows: rows};
   document.getElementById("stdStatus").textContent = "✅ 1단계 결과 "+rows.length+"행 바로 가져옴 (몰 "+(new Set(rows.map(function(r){return r["몰"];}))).size+"개)";
+  document.getElementById("stdResetBtn").style.display = "inline-block";
   statusEl.textContent = "✅ 가져오기 완료!";
   checkReady();
 });
