@@ -1563,10 +1563,12 @@ function runMatching(){
   stdOnly.forEach(function(m){ mallSet[m.mall] = true; });
   var mallSummary = Object.keys(mallSet).sort().map(function(mall){
     var mm = matched.filter(function(m){ return m.erp.mall===mall; });
+    var mallStdOnly = stdOnly.filter(function(m){return m.mall===mall;});
     var sale = mm.reduce(function(s,m){return s+m.sale;},0);
     var fee = mm.reduce(function(s,m){return s+(m.std.fee||0);},0);
     var cost = mm.reduce(function(s,m){return s+m.cost;},0);
     var netIn = mm.reduce(function(s,m){return s+(m.std.netIn||0);},0);
+    var stdOnlyNetIn = mallStdOnly.reduce(function(s,m){return s+(m.netIn||0);},0);
     var profit = sale - cost;
     var netSaleIn = sale - fee;
     var deduction = netSaleIn - netIn;
@@ -1574,7 +1576,7 @@ function runMatching(){
       mall: mall,
       count: mm.length,
       erpOnlyCount: erpOnly.filter(function(m){return m.mall===mall;}).length,
-      stdOnlyCount: stdOnly.filter(function(m){return m.mall===mall;}).length,
+      stdOnlyCount: mallStdOnly.length,
       sale: sale, saleExVat: sale/1.1,
       cost: cost, costExVat: cost/1.1,
       profit: profit, profitExVat: profit/1.1,
@@ -1584,7 +1586,9 @@ function runMatching(){
       netSaleIn: netSaleIn,
       deduction: deduction, deductionExVat: deduction/1.1,
       afterDeduction: netSaleIn - deduction,
-      netIn: netIn
+      netIn: netIn,
+      stdOnlyNetIn: stdOnlyNetIn,
+      netInTotal: netIn + stdOnlyNetIn
     };
   });
 
@@ -1600,6 +1604,7 @@ function renderResult(){
   var totalCost = r.mallSummary.reduce(function(s,m){return s+m.cost;},0);
   var totalProfit = totalSale-totalCost;
   var totalNetIn = r.mallSummary.reduce(function(s,m){return s+m.netIn;},0);
+  var totalStdOnlyNetIn = r.mallSummary.reduce(function(s,m){return s+m.stdOnlyNetIn;},0);
   var qualityCount = { ok:0, warn:0 };
   r.matched.forEach(function(m){ qualityCount[m.quality] = (qualityCount[m.quality]||0)+1; });
   var stdOnlySale = r.stdOnly.reduce(function(s,x){return s+(x.sale||0);},0);
@@ -1613,7 +1618,9 @@ function renderResult(){
     ["총 매출원가", fmt(totalCost)+" 원"],
     ["총 매출이익", fmt(totalProfit)+" 원"],
     ["평균 매출이익율", (totalSale? (totalProfit/totalSale*100):0).toFixed(1)+" %"],
-    ["총 실입금액", fmt(totalNetIn)+" 원"],
+    ["실입금액(매칭분)", fmt(totalNetIn)+" 원"],
+    ["표준정산미매칭 실입금액", fmt(totalStdOnlyNetIn)+" 원"],
+    ["💰 총 실입금액(전체)", fmt(totalNetIn+totalStdOnlyNetIn)+" 원"],
     ["🔴 미매칭(ERP) 건수/매출", r.erpOnly.length+"건 / "+fmt(erpOnlySale)+"원"],
     ["🔴 미매칭(표준정산) 건수/매출", r.stdOnly.length+"건 / "+fmt(stdOnlySale)+"원"],
     ["✅ 검산: 매칭매출+미매칭매출", fmt(totalSale+stdOnlySale)+" 원 (1단계 총매출과 비교)"],
@@ -1636,9 +1643,9 @@ function renderTab(tab){
   var r = lastResult;
   var html = "";
   if(tab==="mallSummary"){
-    html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th class="num">매칭건수</th><th class="num">매출</th><th class="num">매출(-VAT)</th><th class="num">매출원가</th><th class="num">매출원가(-VAT)</th><th class="num">매출이익</th><th class="num">매출이익(-VAT)</th><th class="num">매출이익율</th><th class="num">수수료</th><th class="num">수수료(-VAT)</th><th class="num">수수료율</th><th class="num">판매입금액</th><th class="num">공제금액</th><th class="num">공제금액(-VAT)</th><th class="num">공제금액차감후입금액</th><th class="num">실입금액</th></tr></thead><tbody>';
+    html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th class="num">매칭건수</th><th class="num">매출</th><th class="num">매출(-VAT)</th><th class="num">매출원가</th><th class="num">매출원가(-VAT)</th><th class="num">매출이익</th><th class="num">매출이익(-VAT)</th><th class="num">매출이익율</th><th class="num">수수료</th><th class="num">수수료(-VAT)</th><th class="num">수수료율</th><th class="num">판매입금액</th><th class="num">공제금액</th><th class="num">공제금액(-VAT)</th><th class="num">공제금액차감후입금액</th><th class="num">실입금액(매칭분)</th><th class="num">표준정산미매칭 실입금액</th><th class="num">실입금액 합계</th></tr></thead><tbody>';
     r.mallSummary.forEach(function(m){
-      html += '<tr><td>'+esc(m.mall)+'</td><td class="num">'+m.count+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.saleExVat)+'</td><td class="num">'+fmt(m.cost)+'</td><td class="num">'+fmt(m.costExVat)+'</td><td class="num">'+fmt(m.profit)+'</td><td class="num">'+fmt(m.profitExVat)+'</td><td class="num">'+(m.profitRate*100).toFixed(1)+'%</td><td class="num">'+fmt(m.fee)+'</td><td class="num">'+fmt(m.feeExVat)+'</td><td class="num">'+(m.feeRate*100).toFixed(1)+'%</td><td class="num">'+fmt(m.netSaleIn)+'</td><td class="num">'+fmt(m.deduction)+'</td><td class="num">'+fmt(m.deductionExVat)+'</td><td class="num">'+fmt(m.afterDeduction)+'</td><td class="num">'+fmt(m.netIn)+'</td></tr>';
+      html += '<tr><td>'+esc(m.mall)+'</td><td class="num">'+m.count+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.saleExVat)+'</td><td class="num">'+fmt(m.cost)+'</td><td class="num">'+fmt(m.costExVat)+'</td><td class="num">'+fmt(m.profit)+'</td><td class="num">'+fmt(m.profitExVat)+'</td><td class="num">'+(m.profitRate*100).toFixed(1)+'%</td><td class="num">'+fmt(m.fee)+'</td><td class="num">'+fmt(m.feeExVat)+'</td><td class="num">'+(m.feeRate*100).toFixed(1)+'%</td><td class="num">'+fmt(m.netSaleIn)+'</td><td class="num">'+fmt(m.deduction)+'</td><td class="num">'+fmt(m.deductionExVat)+'</td><td class="num">'+fmt(m.afterDeduction)+'</td><td class="num">'+fmt(m.netIn)+'</td><td class="num">'+fmt(m.stdOnlyNetIn)+'</td><td class="num">'+fmt(m.netInTotal)+'</td></tr>';
     });
     html += '</tbody></table></div>';
   } else if(tab==="matched"){
@@ -1687,7 +1694,9 @@ document.getElementById("s2_exportBtn").addEventListener("click", function(){
       "판매입금액":m.netSaleIn,
       "공제금액":m.deduction, "공제금액 (-VAT)":m.deductionExVat,
       "공제금액 차감후 입금액":m.afterDeduction,
-      "실입금액":m.netIn};
+      "실입금액(매칭분)":m.netIn,
+      "표준정산미매칭 실입금액":m.stdOnlyNetIn,
+      "실입금액 합계":m.netInTotal};
   });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summarySheet), "몰별 손익요약");
 
