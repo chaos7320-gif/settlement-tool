@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>정산 표준화 &amp; 손익계산 통합 도구</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+  var mirrors = [
+    "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+    "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"
+  ];
+  function tryNext(){
+    if(typeof XLSX !== "undefined") return; // 이미 로드됨
+    var url = mirrors.shift();
+    if(!url){
+      document.addEventListener("DOMContentLoaded", function(){
+        var warn = document.createElement("div");
+        warn.style.cssText = "background:#fdeceb;color:#e0373e;padding:14px 20px;text-align:center;font-size:13px;font-weight:600;";
+        warn.textContent = "⚠️ 엑셀 처리 라이브러리를 불러오지 못했습니다. 회사 네트워크가 외부 CDN(cdnjs.cloudflare.com 등)을 차단하고 있을 수 있어요. IT/네트워크 담당자에게 cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com 접속 허용을 요청해주세요.";
+        document.body.prepend(warn);
+      });
+      return;
+    }
+    var s = document.createElement("script");
+    s.src = url;
+    s.onload = function(){ if(typeof XLSX === "undefined") tryNext(); };
+    s.onerror = tryNext;
+    document.head.appendChild(s);
+  }
+  window.addEventListener("load", function(){
+    setTimeout(function(){ if(typeof XLSX === "undefined") tryNext(); }, 300);
+  });
+})();
+</script>
+<style>
+
+  :root{
+    --bg:#f6f7fb; --card:#ffffff; --border:#e3e6ee; --text:#1f2430; --sub:#6b7280;
+    --accent:#3b5bfd; --accent2:#eef1ff; --good:#0e9f6e; --bad:#e0373e; --warn:#d97706;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text);}
+  header{background:linear-gradient(135deg,#3b5bfd,#6b46ff);color:#fff;padding:28px 32px;}
+  header h1{margin:0 0 6px;font-size:22px;}
+  header p{margin:0;opacity:.9;font-size:13.5px;}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 80px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin-bottom:18px;box-shadow:0 1px 2px rgba(20,20,50,.03);}
+  .card h2{font-size:16px;margin:0 0 4px;display:flex;align-items:center;gap:8px;}
+  .step-badge{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;}
+  .card .desc{font-size:12.5px;color:var(--sub);margin:0 0 14px;}
+  .formula{background:var(--accent2);border:1px dashed #b9c5ff;border-radius:10px;padding:12px 14px;font-size:13px;color:#33409e;margin-bottom:14px;line-height:1.6;}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13.5px;font-weight:600;cursor:pointer;}
+  .btn:hover{opacity:.92;}
+  .btn.gray{background:#f1f2f6;color:#444;}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
+  th{background:#fafbfe;font-weight:600;color:#444;position:sticky;top:0;}
+  .num{text-align:right;font-variant-numeric:tabular-nums;}
+  select,.txt{padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12.5px;background:#fff;}
+  .mall-card{border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:#fcfcfe;}
+  .mall-card .mhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;}
+  .mall-card .mhead .name{font-weight:700;font-size:14px;}
+  .map-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;}
+  .map-item label{display:block;font-size:11.5px;color:var(--sub);margin-bottom:3px;}
+  .map-item.required label{color:var(--accent);font-weight:600;}
+  .footer-note{font-size:11.5px;color:var(--sub);margin-top:6px;}
+  .flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .dropzone{border:2px dashed var(--border);border-radius:10px;padding:22px;text-align:center;cursor:pointer;background:#fafbff;transition:.15s;}
+  .dropzone:hover, .dropzone.dragover{border-color:var(--accent);background:var(--accent2);}
+  .dropzone .dz-icon{font-size:22px;margin-bottom:4px;}
+  .dropzone .dz-text{font-size:13px;color:var(--sub);}
+  .dropzone .dz-text b{color:var(--accent);}
+  .dropzone input[type=file]{display:none;}
+  .scrollbox{max-height:460px;overflow:auto;border:1px solid var(--border);border-radius:8px;}
+  .grid-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px;}
+  .sum-box{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 14px;}
+  .sum-box .lbl{font-size:11.5px;color:var(--sub);margin-bottom:4px;}
+  .sum-box .val{font-size:18px;font-weight:700;}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;background:#eef1ff;color:var(--accent);}
+
+.top-tabs{display:flex;gap:4px;padding:0 32px;background:#232842;}
+.top-tab{padding:14px 22px;color:#aab0d6;cursor:pointer;font-size:14.5px;font-weight:700;border-bottom:3px solid transparent;transition:.15s;}
+.top-tab:hover{color:#fff;background:rgba(255,255,255,.06);}
+.top-tab.active{color:#fff;background:rgba(255,255,255,.12);border-bottom-color:#7d9dff;}
+.page{display:none;}
+.page.active{display:block;}
+.handoff-box{background:var(--accent2);border:1px dashed #b9c5ff;border-radius:10px;padding:14px 16px;margin-bottom:18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<header>
+  <h1>🧩🧮 정산 표준화 &amp; ERP 매칭·손익계산</h1>
+  <p>1단계에서 정산서를 표준화하고, 2단계에서 ERP와 매칭해 손익을 계산합니다.</p>
+</header>
+<div class="top-tabs">
+  <div class="top-tab active" data-page="page1">1단계 · 정산서 표준화</div>
+  <div class="top-tab" data-page="page2">2단계 · ERP 매칭 &amp; 손익계산</div>
+</div>
+
+<div id="page1" class="page active">
+<div class="wrap">
+<header>
+  <h1>🧩 1단계 · 정산서 표준화</h1>
+  <p>몰마다 제각각인 정산서를 하나의 표준 양식으로 통일합니다. 완성된 표준화 파일은 2단계(ERP 매칭 & 손익계산)에서 사용됩니다.</p>
+</header>
+<div class="wrap">
+
+  <div class="card">
+    <h2><span class="step-badge">1</span> 정산서 파일 업로드</h2>
+    <p class="desc">몰 정산서를 한 번에 여러 개 올릴 수 있어요 (드래그 앤 드롭 가능). 파일마다 몰을 선택하고, 아래 표준 컬럼에 맞춰 원본 컬럼을 매핑해주세요.</p>
+    <div class="formula">
+      표준 컬럼 &nbsp;<b>몰 · 주문번호* · 상품명 · 옵션값 · 수량 · 매출* · 업체수수료 · 업체부담쿠폰 · 몰부담쿠폰 · 실입금액*</b> &nbsp;(*표시는 필수)<br>
+      상품명·옵션값은 2단계에서 원가 매칭(주문번호+상품명+옵션값) 때 필요해요. 필수는 아니지만 체크해두면 결과에 포함됩니다.<br>
+      수수료율은 업체수수료÷매출로 자동 계산되어 표준화 파일에 함께 저장됩니다.
+    </div>
+    <div class="dropzone" id="settleDropzone">
+      <div class="dz-icon">📁</div>
+      <div class="dz-text"><b>클릭하거나</b> 여러 정산서 파일을 이 위로 끌어다 놓으세요 (xlsx, xls, csv)</div>
+      <input type="file" id="settleFiles" accept=".xlsx,.xls,.csv" multiple>
+    </div>
+    <div id="settleNav" style="display:none;margin-top:10px;" class="flex"></div>
+    <div id="settleMapArea" style="margin-top:14px;"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step-badge">2</span> 표준화 변환 실행</h2>
+    <div class="flex">
+      <button class="btn" id="runConvertBtn" disabled>표준화 변환 실행</button>
+      <span class="footer-note" id="preStatus">정산서 파일과 필수(*) 컬럼 매핑을 완료해주세요.</span>
+    </div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none;">
+    <h2><span class="step-badge">3</span> 표준화 결과</h2>
+    <div class="grid-summary" id="summaryBoxes"></div>
+    <div class="scrollbox" id="previewArea"></div>
+    <div class="flex" style="margin-top:14px;">
+      <button class="btn" id="exportBtn">표준정산_통합.xlsx 다운로드</button>
+      <span class="footer-note">이 파일을 2단계(ERP 매칭 & 손익계산) 도구에 그대로 업로드하면 됩니다.</span>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+
+<div id="page2" class="page">
+<div class="wrap">
+  <div class="card handoff-box">
+    <span>🔗 1단계에서 방금 변환한 표준화 결과가 있으면, 파일 업로드 없이 바로 가져올 수 있어요.</span>
+    <button class="btn" id="handoffBtn" type="button">1단계 결과 바로 가져오기</button>
+    <span class="footer-note" id="handoffStatus"></span>
+  </div>
+<header>
+  <h1>🧮 2단계 · ERP 매칭 &amp; 손익계산</h1>
+  <p>ERP 원본 매출 데이터와 1단계에서 만든 "표준정산_통합" 파일을 매칭해서 몰별 손익을 계산합니다.</p>
+</header>
+<div class="wrap">
+
+  <div class="card">
+    <h2><span class="step-badge">1</span> ERP 매출 데이터 업로드</h2>
+    <p class="desc">주문번호, 몰(매출구분), 주문상품명, 옵션(규격), 수량, 매출, 원가 컬럼이 포함된 ERP 원본 엑셀 파일을 올려주세요.</p>
+    <div class="dropzone" id="erpDropzone">
+      <div class="dz-icon">📁</div>
+      <div class="dz-text"><b>클릭하거나</b> ERP 파일을 이 위로 끌어다 놓으세요</div>
+      <input type="file" id="erpFile" accept=".xlsx,.xls,.csv">
+    </div>
+    <div id="erpMapArea" style="margin-top:14px;"></div>
+    <div id="erpMallPreviewArea"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step-badge">2</span> 표준정산_통합 파일 업로드</h2>
+    <p class="desc">1단계 도구에서 다운로드한 "표준정산_통합_YYYY-MM-DD.xlsx" 파일을 그대로 올려주세요. 컬럼이 이미 고정되어 있어서 별도 매핑이 필요 없습니다.</p>
+    <div class="dropzone" id="stdDropzone">
+      <div class="dz-icon">📁</div>
+      <div class="dz-text"><b>클릭하거나</b> 표준정산_통합 파일을 이 위로 끌어다 놓으세요</div>
+      <input type="file" id="stdFile" accept=".xlsx,.xls,.csv">
+    </div>
+    <div id="stdStatus" class="footer-note" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step-badge">3</span> 매칭 실행</h2>
+    <div class="formula">
+      매칭 순서 &nbsp;① 몰+주문번호 그룹 안에서 <b>상품명+옵션값 정확매칭</b> → ② 남은 건 <b>상품명만 매칭</b> → ③ 그래도 남았는데 개수가 같으면 <b>순서대로 매칭(확인 필요)</b> → ④ 그룹 자체가 안 맞으면 <b>상품명+옵션값+금액</b>으로 몰 전체에서 보조매칭 → ⑤ 그래도 없으면 미매칭<br>
+      매출이익 계산식 &nbsp;<b>매출이익 = 매출 − 매출원가</b> &nbsp;|&nbsp; (-VAT) 항목은 ÷1.1 &nbsp;|&nbsp; 매출·수수료·실입금액은 표준정산 파일 값, 매출원가는 ERP 값 사용
+    </div>
+    <div class="tolerance">
+      <label>보조매칭 금액 오차: <input type="number" id="tolPct" value="5" min="0"> %</label>
+      <button class="btn" id="runMatchBtn" disabled>매칭 &amp; 손익계산 실행</button>
+    </div>
+    <div class="footer-note" id="s2_preStatus">ERP 파일 매핑과 표준정산 파일 업로드를 먼저 완료해주세요.</div>
+  </div>
+
+  <div class="card" id="s2_resultCard" style="display:none;">
+    <h2><span class="step-badge">4</span> 결과</h2>
+    <div class="grid-summary" id="s2_summaryBoxes"></div>
+    <div class="tabs" id="resultTabs">
+      <div class="tab active" data-tab="mallSummary">몰별 손익 요약</div>
+      <div class="tab" data-tab="matched">매칭 상세</div>
+      <div class="tab" data-tab="erpOnly">ERP만 존재(미정산)</div>
+      <div class="tab" data-tab="stdOnly">표준정산만 존재(ERP 미등록)</div>
+      <div class="tab" data-tab="flags">⚠ 이상치 점검</div>
+    </div>
+    <div id="tabContent"></div>
+    <div class="flex" style="margin-top:14px;">
+      <button class="btn" id="s2_exportBtn">엑셀로 내보내기</button>
+      <span class="footer-note">요약 / 매칭상세 / ERP미매칭 / 표준정산미매칭 / 이상치 시트가 포함됩니다.</span>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+
+<script>
+document.querySelectorAll(".top-tab").forEach(function(t){
+  t.addEventListener("click", function(){
+    document.querySelectorAll(".top-tab").forEach(function(x){x.classList.remove("active");});
+    document.querySelectorAll(".page").forEach(function(x){x.classList.remove("active");});
+    t.classList.add("active");
+    document.getElementById(t.getAttribute("data-page")).classList.add("active");
+  });
+});
+</script>
+
+<script>
+(function(){
+
+/* ===================== 공통 유틸 ===================== */
+function norm(s){ return (s===undefined||s===null) ? "" : String(s).trim().toUpperCase().replace(/[\s\-_\.\/]/g,""); }
+function toNum(v){
+  if(v===undefined||v===null||v==="") return 0;
+  if(typeof v === "number") return v;
+  var s = String(v).replace(/[,₩원\s]/g,"");
+  var n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+function fmt(n){ return Math.round(n).toLocaleString("ko-KR"); }
+function excelDateToStr(v){
+  if(v===undefined||v===null||v==="") return "";
+  if(typeof v === "number"){
+    var d = XLSX.SSF.parse_date_code(v);
+    if(d) return d.y+"-"+String(d.m).padStart(2,"0")+"-"+String(d.d).padStart(2,"0");
+  }
+  var s = String(v);
+  var m = s.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+  if(m) return m[1]+"-"+m[2].padStart(2,"0")+"-"+m[3].padStart(2,"0");
+  return s;
+}
+function saveProfile(key, mapping){ try{ localStorage.setItem(key, JSON.stringify(mapping)); }catch(e){} }
+function loadProfile(key){ try{ var v = localStorage.getItem(key); return v?JSON.parse(v):null; }catch(e){ return null; } }
+function getNumericHeaders(headers, rows){
+  var sample = (rows||[]).slice(0, 20);
+  var result = headers.filter(function(h){
+    var checked = 0, numeric = 0;
+    for(var i=0;i<sample.length;i++){
+      var v = sample[i][h];
+      if(v===undefined || v==="" || v===null) continue;
+      checked++;
+      if(typeof v === "number") { numeric++; continue; }
+      var s = String(v).replace(/[,₩원\s]/g,"");
+      if(s!=="" && !isNaN(parseFloat(s)) && /^-?[\d.,]+$/.test(String(v).replace(/[,₩원\s]/g,""))) numeric++;
+    }
+    return checked>0 && (numeric/checked) >= 0.8;
+  });
+  // 표본이 없거나 숫자형으로 하나도 안 걸러지면, 안전하게 전체 컬럼을 보여준다 (빈 목록 방지)
+  return result.length>0 ? result : headers;
+}
+
+function loadWorkbookAllSheets(file, cb){
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var wb = XLSX.read(e.target.result, {type:"array", cellDates:false});
+    var sheetsRaw = {};
+    wb.SheetNames.forEach(function(name){
+      sheetsRaw[name] = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, raw:true, defval:""});
+    });
+    cb({fileName:file.name, sheetNames:wb.SheetNames, sheetsRaw:sheetsRaw});
+  };
+  reader.readAsArrayBuffer(file);
+}
+function parseSheetRows(rawRows){
+  var headerIdx = 0, best = -1;
+  var scanLimit = Math.min(20, rawRows.length);
+  // 1차: 채워진 칸 수 + 문자(텍스트) 비율이 높은 행을 헤더로 우선 선택 (데이터 행이 숫자 위주로 더 꽉 차 있어도 헤더로 오인하지 않도록)
+  var bestScore = -1;
+  for(var i=0;i<scanLimit; i++){
+    var rowArr = rawRows[i];
+    var filled = 0, strLike = 0;
+    rowArr.forEach(function(c){
+      if(c==="" || c===undefined || c===null) return;
+      filled++;
+      if(typeof c === "string" && isNaN(parseFloat(c.replace(/[,₩원\s]/g,"")))) strLike++;
+    });
+    if(filled===0) continue;
+    var strRatio = strLike/filled;
+    var score = strRatio>=0.5 ? (1000+filled) : filled; // 텍스트 비율 높은 행에 큰 가산점
+    if(score > bestScore){ bestScore = score; headerIdx = i; best = filled; }
+  }
+  var headers = (rawRows[headerIdx]||[]).map(function(h,idx){ return (h===""||h===undefined) ? ("컬럼"+(idx+1)) : String(h).trim(); });
+  var dataRows = rawRows.slice(headerIdx+1).filter(function(r){ return r.some(function(c){return c!=="" && c!==undefined;}); });
+  var objRows = dataRows.map(function(r){
+    var o = {};
+    headers.forEach(function(h,idx){ o[h] = r[idx]; });
+    return o;
+  });
+  return {headers:headers, rows:objRows};
+}
+function pickBestSheet(sheetsRaw, sheetNames){
+  var best = sheetNames[0], bestCount = -1;
+  sheetNames.forEach(function(name){
+    var count = sheetsRaw[name] ? sheetsRaw[name].length : 0;
+    if(count > bestCount){ bestCount = count; best = name; }
+  });
+  return best;
+}
+function setupDropzone(zoneId, inputId){
+  var zone = document.getElementById(zoneId);
+  var input = document.getElementById(inputId);
+  zone.addEventListener("click", function(){ input.click(); });
+  ["dragenter","dragover"].forEach(function(evt){
+    zone.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); zone.classList.add("dragover"); });
+  });
+  ["dragleave","drop"].forEach(function(evt){
+    zone.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); zone.classList.remove("dragover"); });
+  });
+  zone.addEventListener("drop", function(e){
+    var files = e.dataTransfer.files;
+    if(!files || files.length===0) return;
+    input.files = files;
+    input.dispatchEvent(new Event("change"));
+  });
+}
+setupDropzone("settleDropzone", "settleFiles");
+
+var KNOWN_MALLS = ["11번가","롯데온","롯데홈쇼핑","CJ몰","GS SHOP","KREAM","LG라이프케어","SSF","신세계","삼성카드쇼핑","솔드아웃","스마트스토어","에이블리","지그재그","카카오 선물하기","마켓컬리","퀸잇","포이즌","하프클럽","현대홈쇼핑"];
+
+/* 몰별 기본 계산식 프리셋. colIndex는 헤더 이름이 병합되어 못 읽는 경우 위치(0-based)로 지정 */
+var MALL_PRESETS = {
+  "11번가": {
+    sale: "판매금액합계",
+    saleAddCols: ["추가정산금액합계"],
+    saleSubCols: ["판매자기본할인","판매자추가할인","11번가할인","복수구매할인비용","판매자부담카드추가할인","[공제]스토어묶음할인"],
+    fee: "서비스이용료(상품)",
+    feeAddCols: ["서비스이용료(선결제배송비)"],
+    feeSubCols: ["11번가할인"],
+    netIn: "정산금액",
+    note: "월 77,000원 서버이용료는 파일에 없는 고정비라 자동 반영이 안 됩니다. 월말에 수동으로 더해주세요."
+  },
+  "CJ몰": {
+    saleColIndex: 15,
+    feeColIndex: 18,
+    netIn: "상품대금지급예정액(공제전)",
+    note: "직매입매출, 택배비/무료배송쿠폰/저단가배송비(공제내역)는 이 파일에 없는 별도 데이터라 반영되지 않았습니다."
+  },
+  "GS SHOP": {
+    orderNoFallback: "원주문번호",
+    sale: "고객결제액",
+    netIn: "협력사지급금액",
+    note: "반품 건은 주문번호가 비어있고 원주문번호 컬럼에만 있어서, 주문번호가 없으면 원주문번호를 자동으로 대신 사용합니다."
+  },
+  "KREAM": {
+    sale: "매출액",
+    fee: "수수료",
+    netIn: "정산금액",
+    sellerCoupon: "쿠폰 할인(파트너 부담)",
+    mallCoupon: "쿠폰 할인(KREAM 부담)",
+    note: "크림은 병행/공식파트너 형식에 따라 컬럼 구성이 다르지만, 매출액·수수료·정산금액 이름은 두 형식 모두 동일해서 이 프리셋 하나로 커버됩니다."
+  },
+  "롯데홈쇼핑": {
+    sale: "판매금액",
+    fee: "매입수수료",
+    netIn: "매입금액",
+    vatExclusive: true,
+    note: "이 몰의 금액은 부가세 제외 기준이라, 저장 시 자동으로 ×1.1이 적용됩니다 (다른 몰과 부가세 기준을 통일하기 위함)."
+  },
+  "스마트스토어": {
+    sale: "정산기준금액(A)",
+    feeSubCols: ["Npay 수수료(B)","매출연동 수수료 합계(C)","무이자할부 수수료(D)"],
+    note: "실입금액 컬럼이 따로 없어서 매출-수수료로 자동 역산합니다. 이 3개 컬럼은 원본이 음수라 '뺄 항목'으로 넣어야 수수료가 양수로 정확히 계산됩니다."
+  },
+  "에이블리": {
+    sale: "결제 금액",
+    saleAddCols: ["배송비","프로모션 지원금"],
+    feeAddCols: ["결제 수수료","플랫폼 수수료"],
+    netIn: "정산금",
+    note: "매출 = 결제금액+배송비+프로모션지원금, 업체수수료 = 결제수수료+플랫폼수수료 (둘 다 더해야 정산금과 정확히 맞습니다)."
+  }
+};
+function resolvePresetCol(headers, val){
+  if(val===undefined || val===null) return "";
+  if(typeof val === "number") return headers[val] || "";
+  return headers.indexOf(val)>-1 ? val : "";
+}
+
+/* ===================== 표준 필드 정의 ===================== */
+var STD_FIELDS = [
+  {key:"orderNo", label:"주문번호", required:true, kw:["주문번호","주문 번호","오더번호","ordernumber","orderno"]},
+  {key:"orderNoFallback", label:"주문번호 대체(원주문번호 등)", required:false, kw:["원주문번호","원 주문번호","모주문번호"]},
+  {key:"productName", label:"상품명", required:false, kw:["상품명","제품명","품명","상품 이름"]},
+  {key:"optionValue", label:"옵션값", required:false, kw:["옵션명","옵션값","옵션","사이즈","규격"]},
+  {key:"qty", label:"수량", required:false, kw:["수량","qty"]},
+  {key:"sale", label:"매출(총 판매금액)", required:true, kw:["판매금액","거래금액","주문금액","상품금액","결제금액","판매가"]},
+  {key:"fee", label:"업체수수료", required:false, kw:["수수료","판매수수료","입점수수료"]},
+  {key:"sellerCoupon", label:"업체부담쿠폰", required:false, kw:["업체부담쿠폰","판매자쿠폰","업체쿠폰"]},
+  {key:"mallCoupon", label:"몰부담쿠폰(참고용)", required:false, kw:["몰부담쿠폰","운영사쿠폰","플랫폼쿠폰"]},
+  {key:"netIn", label:"실입금액(최종 입금액)", required:true, kw:["정산금액","정산액","지급액","실지급","입금액","정산 금액"]},
+];
+
+/* ===================== 전역 상태 ===================== */
+var state = { settleFiles: [] };
+var TEAM_MAPPINGS = {};
+
+function guessColumn(headers, keywords){
+  for(var k=0;k<keywords.length;k++){
+    for(var i=0;i<headers.length;i++){
+      if(headers[i].replace(/\s/g,"").toLowerCase().indexOf(keywords[k].replace(/\s/g,"").toLowerCase())>-1){
+        return headers[i];
+      }
+    }
+  }
+  return "";
+}
+function renderMapping(container, headers, fields, savedMapping, onChange){
+  var html = '<div class="map-grid">';
+  fields.forEach(function(f){
+    var guessed = (savedMapping && savedMapping[f.key] && headers.indexOf(savedMapping[f.key])>-1) ? savedMapping[f.key] : guessColumn(headers, f.kw);
+    html += '<div class="map-item '+(f.required?'required':'')+'"><label>'+f.label+(f.required?' *':'')+'</label>';
+    html += '<select data-field="'+f.key+'" class="mapSel"><option value="">(사용안함)</option>';
+    headers.forEach(function(h){
+      html += '<option value="'+h.replace(/"/g,'&quot;')+'" '+(h===guessed?'selected':'')+'>'+h+'</option>';
+    });
+    html += '</select></div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+  var sels = container.querySelectorAll(".mapSel");
+  function collect(){
+    var m = {};
+    sels.forEach(function(s){ m[s.getAttribute("data-field")] = s.value; });
+    onChange(m);
+  }
+  sels.forEach(function(s){ s.addEventListener("change", collect); });
+  collect();
+}
+
+function checkReady(){
+  var ready = state.settleFiles.length>0 && state.settleFiles.every(function(f){
+    var hasNetIn = f.mapping.netIn || (f.mapping.netInColumns && f.mapping.netInColumns.length>0);
+    var hasFee = f.mapping.fee || f.mapping.feeRateCol || (f.mapping.feeAddCols && f.mapping.feeAddCols.length>0) || (f.mapping.feeSubCols && f.mapping.feeSubCols.length>0);
+    return f.mapping.orderNo && f.mapping.sale && (hasNetIn || hasFee);
+  });
+  document.getElementById("runConvertBtn").disabled = !ready;
+  document.getElementById("preStatus").textContent = ready ? "변환 실행 준비 완료" : "모든 파일의 필수(*) 컬럼(주문번호/매출)과 실입금액 또는 업체수수료 중 하나 이상을 매핑해주세요.";
+}
+
+/* ===================== 파일 업로드 & 단계별 카드 ===================== */
+document.getElementById("settleFiles").addEventListener("change", function(e){
+  var files = Array.from(e.target.files);
+  var area = document.getElementById("settleMapArea");
+  area.innerHTML = "";
+  state.settleFiles = [];
+  var cardsArr = [];
+  var currentIdx = 0;
+
+  function updateNav(){
+    var nav = document.getElementById("settleNav");
+    if(cardsArr.length <= 1){ nav.style.display = "none"; cardsArr.forEach(function(c){ c.style.display = "block"; }); return; }
+    nav.style.display = "flex";
+    nav.innerHTML =
+      '<button class="btn gray" id="settlePrevBtn">◀ 이전</button>'+
+      '<span style="font-weight:600;">파일 '+(currentIdx+1)+' / '+cardsArr.length+' — '+ (state.settleFiles[currentIdx] ? state.settleFiles[currentIdx].mallName : "") +'</span>'+
+      '<button class="btn gray" id="settleNextBtn">다음 ▶</button>'+
+      '<span class="footer-note">(매핑은 파일마다 자동 저장되니, 넘겨도 유지됩니다)</span>';
+    cardsArr.forEach(function(c, i){ c.style.display = (i===currentIdx) ? "block" : "none"; });
+    document.getElementById("settlePrevBtn").disabled = (currentIdx===0);
+    document.getElementById("settleNextBtn").disabled = (currentIdx===cardsArr.length-1);
+    document.getElementById("settlePrevBtn").addEventListener("click", function(){ if(currentIdx>0){ currentIdx--; updateNav(); } });
+    document.getElementById("settleNextBtn").addEventListener("click", function(){ if(currentIdx<cardsArr.length-1){ currentIdx++; updateNav(); } });
+  }
+
+  files.forEach(function(file, idx){
+    loadWorkbookAllSheets(file, function(wbRes){
+      var defaultSheet = pickBestSheet(wbRes.sheetsRaw, wbRes.sheetNames);
+      var guessMallName = file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[\d_\-]+$/,"").trim();
+      var card = document.createElement("div");
+      card.className = "mall-card";
+      area.appendChild(card);
+      cardsArr.push(card);
+
+      var entry = {mallName:guessMallName, headers:[], rows:[], mapping:{}};
+      state.settleFiles.push(entry);
+      updateNav();
+
+      // 시트별 헤더 구조(시그니처) 계산 → 구조가 같은 시트는 기본으로 같이 합쳐지도록
+      var sheetSignature = {};
+      wbRes.sheetNames.forEach(function(name){
+        sheetSignature[name] = parseSheetRows(wbRes.sheetsRaw[name]).headers.join("|");
+      });
+      var defaultSignature = sheetSignature[defaultSheet];
+      var defaultSelected = wbRes.sheetNames.filter(function(n){ return sheetSignature[n]===defaultSignature; });
+
+      if(!entry.joinKeys) entry.joinKeys = {};
+
+      function renderForSheets(selectedNames){
+        // 구조(헤더)가 같은 시트끼리 그룹핑
+        var groups = {}; // sig -> [sheetNames]
+        selectedNames.forEach(function(n){
+          var sig = sheetSignature[n];
+          if(!groups[sig]) groups[sig] = [];
+          groups[sig].push(n);
+        });
+        var sigKeys = Object.keys(groups);
+        var groupData = sigKeys.map(function(sig, gi){
+          var headers = parseSheetRows(wbRes.sheetsRaw[groups[sig][0]]).headers;
+          var rows = [];
+          groups[sig].forEach(function(n){ rows = rows.concat(parseSheetRows(wbRes.sheetsRaw[n]).rows); });
+          return {sig:sig, sheets:groups[sig], headers:headers, rows:rows};
+        });
+        // 금액(매출/수수료/정산) 컬럼이 있는 그룹을 기준(베이스)으로 우선 삼고, 그 다음 행 수로 정렬
+        var FIN_KEYWORDS = ["결제금액","정산금","수수료","매출","판매금액","판매가","정산액","입금액"];
+        function finScore(headers){
+          return headers.reduce(function(s,h){
+            var hh = h.replace(/\s/g,"");
+            return s + (FIN_KEYWORDS.some(function(k){ return hh.indexOf(k)>-1; }) ? 1 : 0);
+          }, 0);
+        }
+        groupData.forEach(function(g){ g.finScore = finScore(g.headers); });
+        groupData.sort(function(a,b){
+          if(b.finScore !== a.finScore) return b.finScore - a.finScore;
+          return b.rows.length - a.rows.length;
+        });
+
+        var joinHtml = "";
+        var parsed;
+        if(groupData.length === 1){
+          parsed = {headers: groupData[0].headers, rows: groupData[0].rows};
+        } else {
+          // 구조가 다른 시트들 -> 연결키로 조인
+          joinHtml = '<div class="footer-note" style="margin:8px 0 4px;color:var(--accent);">🔗 구조가 다른 시트가 섞여있어요 — 각 시트의 연결키(예: 주문번호) 컬럼을 지정하면 옆으로 합쳐집니다.</div>';
+          groupData.forEach(function(g, gi){
+            var guessKey = guessColumn(g.headers, ["주문번호","주문 번호","오더번호"]) || g.headers[0];
+            var savedKey = entry.joinKeys[gi] && g.headers.indexOf(entry.joinKeys[gi])>-1 ? entry.joinKeys[gi] : guessKey;
+            entry.joinKeys[gi] = savedKey;
+            joinHtml += '<div class="flex" style="margin-bottom:6px;font-size:12.5px;">'+
+              '<span>['+g.sheets.join(", ")+'] ('+g.rows.length+'행) 연결키:</span>'+
+              '<select class="txt joinKeySel" data-gi="'+gi+'">'+
+                g.headers.map(function(h){ return '<option value="'+h.replace(/"/g,'&quot;')+'" '+(h===savedKey?'selected':'')+'>'+h+'</option>'; }).join("")+
+              '</select></div>';
+          });
+          // 조인 수행: 행이 가장 많은 그룹을 베이스로, 나머지 그룹을 lookup으로 병합
+          var base = groupData[0];
+          var baseKey = entry.joinKeys[0];
+          var lookups = groupData.slice(1).map(function(g, idx){
+            var gi = idx+1;
+            var key = entry.joinKeys[gi];
+            var dict = {};
+            g.rows.forEach(function(r){ var k = norm(r[key]); if(!(k in dict)) dict[k] = r; });
+            return dict;
+          });
+          var mergedRows = base.rows.map(function(r){
+            var out = Object.assign({}, r);
+            lookups.forEach(function(dict){
+              var match = dict[norm(r[baseKey])];
+              if(match) Object.assign(out, match);
+            });
+            return out;
+          });
+          var mergedHeaders = base.headers.slice();
+          groupData.slice(1).forEach(function(g){
+            g.headers.forEach(function(h){ if(mergedHeaders.indexOf(h)===-1) mergedHeaders.push(h); });
+          });
+          parsed = {headers: mergedHeaders, rows: mergedRows};
+        }
+        entry.headers = parsed.headers;
+        entry.rows = parsed.rows;
+        var sheetSelectHtml = "";
+        if(wbRes.sheetNames.length>1){
+          sheetSelectHtml = '<div class="footer-note" style="margin:6px 0;">합칠 시트 선택 (구조가 같은 시트는 자동으로 같이 체크됩니다 — 2주 단위로 탭이 나뉜 경우 등):</div><div class="flex" style="margin-bottom:6px;">'+
+            wbRes.sheetNames.map(function(n){
+              return '<label class="flex" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;"><input type="checkbox" class="sheetChk" value="'+n+'" '+(selectedNames.indexOf(n)>-1?'checked':'')+' style="width:auto;">'+n+' ('+wbRes.sheetsRaw[n].length+'행)</label>';
+            }).join("")+
+            '</div>'+joinHtml;
+        }
+        card.innerHTML =
+          '<div class="mhead">'+
+            '<span class="name">📄 '+wbRes.fileName+' · '+parsed.rows.length+'행</span>'+
+            '<span class="flex">몰 이름: '+
+              '<select class="txt mallNameSel">'+
+                KNOWN_MALLS.map(function(mn){ return '<option value="'+mn+'">'+mn+'</option>'; }).join("")+
+                '<option value="__custom__">직접입력...</option>'+
+              '</select>'+
+              '<input type="text" class="txt mallNameInput" value="'+guessMallName+'" style="width:120px;display:none;">'+
+            '</span>'+
+          '</div>'+
+          sheetSelectHtml+
+          '<div id="presetNote" class="footer-note" style="color:var(--accent);"></div>'+
+          '<button class="btn gray resetPresetBtn" type="button" style="margin:4px 0 8px;font-size:11.5px;padding:4px 10px;">🔄 프리셋으로 다시 맞추기 (저장된 매핑 지우고 초기화)</button>'+
+          '<div class="mapInner"></div>'+
+          '<div class="footer-note" style="margin-top:10px;"><label class="flex" style="font-size:12.5px;"><input type="checkbox" class="vatToggle" style="width:auto;"> 이 파일의 금액은 부가세 제외(VAT exclusive) 기준입니다 → 저장 시 ×1.1 적용</label></div>'+
+          '<div class="footer-note" style="margin-top:10px;">📌 파일에 없는 고정 추가 비용이 있어요 (정보이용료 등, 월 1회성 금액)</div>'+
+          '<div class="manualAdjArea"></div>'+
+          '<div class="flex" style="margin-top:6px;"><input type="text" class="txt manualAdjLabel" placeholder="항목명 (예: 정보이용료)" style="width:160px;"><input type="number" class="txt manualAdjAmount" placeholder="금액" style="width:100px;"><button class="btn gray manualAdjAddBtn" type="button">+ 추가</button></div>'+
+          '<div class="composeArea" data-key="sale" data-label="매출"></div>'+
+          '<div class="composeArea" data-key="fee" data-label="업체수수료"></div>'+
+          '<div class="footer-note" style="margin-top:10px;"><label class="flex" style="font-size:12.5px;"><input type="checkbox" class="feeRateToggle" style="width:auto;"> 업체수수료가 금액이 아니라 수수료율(%)로만 있어요 → 매출×수수료율로 계산</label></div>'+
+          '<div class="feeRateArea"></div>'+
+          '<div class="footer-note" style="margin-top:10px;"><label class="flex" style="font-size:12.5px;"><input type="checkbox" class="sumToggle" style="width:auto;"> 실입금액이 한 컬럼에 없고 여러 컬럼(원금+수수료들)을 더해야 나와요</label></div>'+
+          '<div class="sumColsArea"></div>';
+
+        if(wbRes.sheetNames.length>1){
+          card.querySelectorAll(".sheetChk").forEach(function(chk){
+            chk.addEventListener("change", function(){
+              var sel = Array.from(card.querySelectorAll(".sheetChk:checked")).map(function(c){return c.value;});
+              if(sel.length===0){ chk.checked = true; return; }
+              renderForSheets(sel);
+            });
+          });
+          card.querySelectorAll(".joinKeySel").forEach(function(sel){
+            sel.addEventListener("change", function(){
+              entry.joinKeys[Number(sel.getAttribute("data-gi"))] = sel.value;
+              renderForSheets(selectedNames);
+            });
+          });
+        }
+
+        var vatChk = card.querySelector(".vatToggle");
+        vatChk.checked = !!entry.mapping.vatExclusive;
+        vatChk.addEventListener("change", function(ev){ entry.mapping.vatExclusive = ev.target.checked; checkReady(); });
+
+        var feeRateChk = card.querySelector(".feeRateToggle");
+        var feeRateArea = card.querySelector(".feeRateArea");
+        function renderFeeRateArea(){
+          var active = !!entry.mapping.feeRateCol;
+          feeRateChk.checked = active;
+          if(!active){ feeRateArea.innerHTML = ""; return; }
+          var numHeaders = getNumericHeaders(parsed.headers, entry.rows);
+          feeRateArea.innerHTML =
+            '<div class="map-grid" style="margin-top:6px;">'+
+              '<div class="map-item"><label>수수료율 컬럼</label><select class="txt feeRateColSel">'+
+                numHeaders.map(function(h){ return '<option value="'+h.replace(/"/g,'&quot;')+'" '+(h===entry.mapping.feeRateCol?'selected':'')+'>'+h+'</option>'; }).join("")+
+              '</select></div>'+
+              '<div class="map-item"><label>값 형식</label><select class="txt feeRateFormatSel">'+
+                '<option value="percent" '+(entry.mapping.feeRatePercent!==false?'selected':'')+'>퍼센트 숫자 (예: 9 → 9%)</option>'+
+                '<option value="decimal" '+(entry.mapping.feeRatePercent===false?'selected':'')+'>소수 (예: 0.09 → 9%)</option>'+
+              '</select></div>'+
+            '</div>';
+          var sel = feeRateArea.querySelector(".feeRateColSel");
+          var fmtSel = feeRateArea.querySelector(".feeRateFormatSel");
+          entry.mapping.feeRateCol = sel.value;
+          sel.addEventListener("change", function(){ entry.mapping.feeRateCol = sel.value; checkReady(); });
+          fmtSel.addEventListener("change", function(){ entry.mapping.feeRatePercent = (fmtSel.value==="percent"); checkReady(); });
+        }
+        feeRateChk.addEventListener("change", function(ev){
+          if(ev.target.checked){
+            var numHeaders = getNumericHeaders(parsed.headers, entry.rows);
+            entry.mapping.feeRateCol = entry.mapping.feeRateCol || guessColumn(parsed.headers,["수수료율","수수료 율"]) || numHeaders[0];
+            if(entry.mapping.feeRatePercent===undefined) entry.mapping.feeRatePercent = true;
+          } else {
+            entry.mapping.feeRateCol = null;
+          }
+          renderFeeRateArea();
+          checkReady();
+        });
+        renderFeeRateArea();
+
+        if(!entry.manualAdjustments) entry.manualAdjustments = [];
+        var manualAdjArea = card.querySelector(".manualAdjArea");
+        function renderManualAdj(){
+          if(entry.manualAdjustments.length===0){ manualAdjArea.innerHTML = '<span class="footer-note">추가된 항목 없음</span>'; return; }
+          manualAdjArea.innerHTML = entry.manualAdjustments.map(function(item, i){
+            return '<span class="pill" style="margin-right:6px;">'+item.label+' '+fmt(item.amount)+'원 <a href="#" data-idx="'+i+'" class="removeAdjBtn" style="color:var(--bad);text-decoration:none;margin-left:4px;">✕</a></span>';
+          }).join("");
+          manualAdjArea.querySelectorAll(".removeAdjBtn").forEach(function(a){
+            a.addEventListener("click", function(ev){ ev.preventDefault(); entry.manualAdjustments.splice(Number(a.getAttribute("data-idx")),1); renderManualAdj(); });
+          });
+        }
+        renderManualAdj();
+        card.querySelector(".manualAdjAddBtn").addEventListener("click", function(){
+          var labelInput = card.querySelector(".manualAdjLabel");
+          var amountInput = card.querySelector(".manualAdjAmount");
+          var label = labelInput.value.trim() || "고정추가비용";
+          var amount = toNum(amountInput.value);
+          if(amount===0) return;
+          entry.manualAdjustments.push({label:label, amount:amount});
+          labelInput.value = ""; amountInput.value = "";
+          renderManualAdj();
+        });
+
+        function renderCompose(key, label){
+          var area = card.querySelector('.composeArea[data-key="'+key+'"]');
+          var addKey = key+"AddCols", subKey = key+"SubCols";
+          var numHeaders = getNumericHeaders(parsed.headers, entry.rows);
+          function build(){
+            var addArr = entry.mapping[addKey]||[], subArr = entry.mapping[subKey]||[];
+            var active = (addArr.length||subArr.length);
+            var baseSel = card.querySelector('.mapSel[data-field="'+key+'"]');
+            if(baseSel){ baseSel.disabled = !!active; baseSel.style.opacity = active ? "0.4" : "1"; }
+            var html = '<div class="footer-note" style="margin-top:8px;"><label class="flex" style="font-size:12.5px;"><input type="checkbox" class="composeToggle" '+(active?'checked':'')+' style="width:auto;"> '+label+'을(를) 여러 컬럼으로 계산해요 (더하기/빼기) — 켜면 위 단일선택은 무시됩니다</label></div><div class="composeBody" style="'+(active?'':'display:none;')+'">'+
+              '<div class="footer-note">➕ 더할 항목 (원본 부호 그대로 더해집니다 — 음수 컬럼을 여기 넣으면 결과가 줄어듭니다)</div><div class="map-grid">'+
+              numHeaders.map(function(h){ return '<label class="flex" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;"><input type="checkbox" class="addChk" value="'+h.replace(/"/g,'&quot;')+'" '+(addArr.indexOf(h)>-1?'checked':'')+' style="width:auto;">'+h+'</label>'; }).join("")+
+              '</div><div class="footer-note" style="margin-top:6px;">➖ 뺄 항목 (원본 부호 그대로 빼집니다 — 음수 컬럼을 여기 넣으면 결과가 커집니다)</div><div class="map-grid">'+
+              numHeaders.map(function(h){ return '<label class="flex" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;"><input type="checkbox" class="subChk" value="'+h.replace(/"/g,'&quot;')+'" '+(subArr.indexOf(h)>-1?'checked':'')+' style="width:auto;">'+h+'</label>'; }).join("")+
+              '</div></div>';
+            area.innerHTML = html;
+            var body = area.querySelector(".composeBody");
+            area.querySelector(".composeToggle").addEventListener("change", function(ev){
+              body.style.display = ev.target.checked ? "block" : "none";
+              if(baseSel){ baseSel.disabled = ev.target.checked; baseSel.style.opacity = ev.target.checked ? "0.4" : "1"; }
+              if(!ev.target.checked){ entry.mapping[addKey]=null; entry.mapping[subKey]=null; checkReady(); }
+              else { collect(); }
+            });
+            function collect(){
+              entry.mapping[addKey] = Array.from(area.querySelectorAll(".addChk:checked")).map(function(c){return c.value;});
+              entry.mapping[subKey] = Array.from(area.querySelectorAll(".subChk:checked")).map(function(c){return c.value;});
+              checkReady();
+            }
+            area.querySelectorAll(".addChk,.subChk").forEach(function(c){ c.addEventListener("change", collect); });
+          }
+          build();
+        }
+
+        var mallSel = card.querySelector(".mallNameSel");
+        var mallTxt = card.querySelector(".mallNameInput");
+        var matchedKnown = KNOWN_MALLS.find(function(mn){ return mn===guessMallName || mn.indexOf(guessMallName)>-1 || guessMallName.indexOf(mn)>-1; });
+        if(matchedKnown){ mallSel.value = matchedKnown; mallTxt.style.display = "none"; }
+        else { mallSel.value = "__custom__"; mallTxt.style.display = "inline-block"; }
+        mallSel.addEventListener("change", function(){
+          if(mallSel.value === "__custom__"){ mallTxt.style.display = "inline-block"; doMap(mallTxt.value.trim() || guessMallName); }
+          else { mallTxt.style.display = "none"; doMap(mallSel.value); }
+        });
+
+        function doMap(mallName){
+          var saved = (TEAM_MAPPINGS && TEAM_MAPPINGS[mallName]) ? TEAM_MAPPINGS[mallName] : loadProfile("mallMappingProfile_std_"+mallName);
+          var preset = MALL_PRESETS[mallName];
+          renderMapping(card.querySelector(".mapInner"), parsed.headers, STD_FIELDS, saved, function(mapping){
+            entry.mallName = mallName;
+            var prevNetInCols = entry.mapping.netInColumns;
+            entry.mapping = mapping;
+            var EXTRA_KEYS = ["saleAddCols","saleSubCols","feeAddCols","feeSubCols","netInColumns","vatExclusive","feeRateCol","feeRatePercent"];
+            EXTRA_KEYS.forEach(function(k){
+              if(saved && saved[k]!==undefined) mapping[k] = saved[k];
+            });
+            if(prevNetInCols && !mapping.netInColumns) mapping.netInColumns = prevNetInCols;
+            vatChk.checked = !!mapping.vatExclusive;
+
+            if(preset && !saved){
+              if(preset.sale) mapping.sale = resolvePresetCol(parsed.headers, preset.sale) || mapping.sale;
+              if(preset.saleColIndex!==undefined) mapping.sale = resolvePresetCol(parsed.headers, preset.saleColIndex);
+              if((preset.saleAddCols || preset.saleSubCols) && !preset.sale && preset.saleColIndex===undefined) mapping.sale = "";
+              if(preset.saleAddCols) mapping.saleAddCols = preset.saleAddCols.filter(function(c){return parsed.headers.indexOf(c)>-1;});
+              if(preset.saleSubCols) mapping.saleSubCols = preset.saleSubCols.filter(function(c){return parsed.headers.indexOf(c)>-1;});
+              if(preset.fee) mapping.fee = resolvePresetCol(parsed.headers, preset.fee) || mapping.fee;
+              if(preset.feeColIndex!==undefined) mapping.fee = resolvePresetCol(parsed.headers, preset.feeColIndex);
+              if((preset.feeAddCols || preset.feeSubCols) && !preset.fee && preset.feeColIndex===undefined) mapping.fee = "";
+              if(preset.feeAddCols) mapping.feeAddCols = preset.feeAddCols.filter(function(c){return parsed.headers.indexOf(c)>-1;});
+              if(preset.feeSubCols) mapping.feeSubCols = preset.feeSubCols.filter(function(c){return parsed.headers.indexOf(c)>-1;});
+              if(preset.netIn) mapping.netIn = resolvePresetCol(parsed.headers, preset.netIn) || mapping.netIn;
+              if(preset.orderNoFallback) mapping.orderNoFallback = resolvePresetCol(parsed.headers, preset.orderNoFallback) || mapping.orderNoFallback;
+              if(preset.sellerCoupon) mapping.sellerCoupon = resolvePresetCol(parsed.headers, preset.sellerCoupon) || mapping.sellerCoupon;
+              if(preset.mallCoupon) mapping.mallCoupon = resolvePresetCol(parsed.headers, preset.mallCoupon) || mapping.mallCoupon;
+              if(preset.vatExclusive!==undefined) mapping.vatExclusive = preset.vatExclusive;
+              vatChk.checked = !!mapping.vatExclusive;
+              // reflect overrides back into the visible single-select dropdowns
+              ["sale","fee","netIn","orderNoFallback","sellerCoupon","mallCoupon"].forEach(function(fk){
+                var sel = card.querySelector('.mapSel[data-field="'+fk+'"]');
+                if(sel) sel.value = mapping[fk] || "";
+              });
+            }
+            saveProfile("mallMappingProfile_std_"+mallName, mapping);
+            renderCompose("sale","매출");
+            renderCompose("fee","업체수수료");
+            renderFeeRateArea();
+            checkReady();
+            updateNav();
+          });
+          var presetNoteEl = card.querySelector('#presetNote');
+          if(presetNoteEl){
+            if(saved){
+              presetNoteEl.textContent = "💾 이전에 저장해두신 매핑을 그대로 불러왔습니다.";
+            } else if(preset){
+              presetNoteEl.textContent = "ℹ️ "+mallName+" 기본 프리셋이 적용되었습니다"+(preset.note ? (" — "+preset.note) : "")+" (직접 수정하면 그 설정이 앞으로 저장됩니다)";
+            } else {
+              presetNoteEl.textContent = "";
+            }
+          }
+        }
+        doMap(matchedKnown || guessMallName);
+        mallTxt.addEventListener("change", function(ev){ doMap(ev.target.value.trim() || guessMallName); });
+        card.querySelector(".resetPresetBtn").addEventListener("click", function(){
+          var currentMall = mallSel.value === "__custom__" ? (mallTxt.value.trim() || guessMallName) : mallSel.value;
+          localStorage.removeItem("mallMappingProfile_std_"+currentMall);
+          doMap(currentMall);
+        });
+
+        var sumColsArea = card.querySelector(".sumColsArea");
+        card.querySelector(".sumToggle").addEventListener("change", function(ev){
+          if(ev.target.checked){
+            var html = '<div class="footer-note" style="margin-bottom:4px;">실입금액에 합산할 컬럼을 모두 체크하세요 (수수료 등 차감 항목은 원본 값이 음수면 자동 반영됩니다) — 숫자형 컬럼만 표시됩니다</div><div class="map-grid">';
+            getNumericHeaders(parsed.headers, entry.rows).forEach(function(h){
+              html += '<label class="flex" style="font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;"><input type="checkbox" class="sumColChk" value="'+h.replace(/"/g,'&quot;')+'" style="width:auto;">'+h+'</label>';
+            });
+            html += '</div>';
+            sumColsArea.innerHTML = html;
+            function collectSum(){
+              var cols = Array.from(sumColsArea.querySelectorAll(".sumColChk:checked")).map(function(c){return c.value;});
+              entry.mapping.netInColumns = cols;
+              checkReady();
+            }
+            sumColsArea.querySelectorAll(".sumColChk").forEach(function(c){ c.addEventListener("change", collectSum); });
+            collectSum();
+          } else {
+            sumColsArea.innerHTML = "";
+            entry.mapping.netInColumns = null;
+            checkReady();
+          }
+        });
+      }
+      renderForSheets(defaultSelected);
+    });
+  });
+});
+
+/* ===================== 변환 실행 ===================== */
+var lastStandardRows = null;
+
+document.getElementById("runConvertBtn").addEventListener("click", function(){
+  var allRows = [];
+  state.settleFiles.forEach(function(fileEntry){
+    var m = fileEntry.mapping;
+    fileEntry.rows.forEach(function(r){
+      var netInIsMapped = !!m.netIn || (m.netInColumns && m.netInColumns.length>0);
+      var netIn = 0;
+      if(netInIsMapped){
+        if(m.netInColumns && m.netInColumns.length>0){
+          netIn = m.netInColumns.reduce(function(s,col){ return s + toNum(r[col]); }, 0);
+        } else {
+          netIn = m.netIn ? toNum(r[m.netIn]) : 0;
+        }
+      }
+      var orderNo = m.orderNo ? String(r[m.orderNo]) : "";
+      if((!orderNo || orderNo==="undefined" || orderNo.trim()==="") && m.orderNoFallback){
+        var fb = r[m.orderNoFallback];
+        orderNo = (fb===undefined||fb===null) ? "" : String(fb);
+      }
+      if(!orderNo || orderNo==="undefined" || orderNo.trim()==="") return;
+      var sale = m.sale ? toNum(r[m.sale]) : 0;
+      if(m.saleAddCols && m.saleAddCols.length>0){
+        sale += m.saleAddCols.reduce(function(s,col){ return s + toNum(r[col]); }, 0);
+      }
+      if(m.saleSubCols && m.saleSubCols.length>0){
+        sale -= m.saleSubCols.reduce(function(s,col){ return s + toNum(r[col]); }, 0);
+      }
+      var fee;
+      var feeEstimated = false, netInEstimated = false;
+      var feeIsMapped = !!m.fee || (m.feeAddCols && m.feeAddCols.length>0) || (m.feeSubCols && m.feeSubCols.length>0);
+      if(m.feeRateCol){
+        var rateVal = toNum(r[m.feeRateCol]);
+        var ratePct = (m.feeRatePercent!==false) ? rateVal/100 : rateVal;
+        fee = sale * ratePct;
+      } else if(feeIsMapped){
+        fee = m.fee ? toNum(r[m.fee]) : 0;
+        if(m.feeAddCols && m.feeAddCols.length>0){
+          fee += m.feeAddCols.reduce(function(s,col){ return s + toNum(r[col]); }, 0);
+        }
+        if(m.feeSubCols && m.feeSubCols.length>0){
+          fee -= m.feeSubCols.reduce(function(s,col){ return s + toNum(r[col]); }, 0);
+        }
+      } else {
+        // 수수료 항목이 따로 없으면 매출-실입금액으로 자동 역산
+        fee = sale - netIn;
+        feeEstimated = true;
+      }
+      if(!netInIsMapped){
+        // 실입금액이 따로 없으면 매출-업체수수료로 자동 역산
+        netIn = sale - fee;
+        netInEstimated = true;
+      }
+      var sellerCoupon = m.sellerCoupon ? toNum(r[m.sellerCoupon]) : "";
+      var mallCoupon = m.mallCoupon ? toNum(r[m.mallCoupon]) : "";
+      var usageFee = m.usageFee ? toNum(r[m.usageFee]) : "";
+      var etcDeduction = m.etcDeduction ? toNum(r[m.etcDeduction]) : "";
+      var netInFinal = netIn;
+      if(m.vatExclusive){
+        sale *= 1.1; fee *= 1.1; netInFinal *= 1.1;
+        if(sellerCoupon!=="") sellerCoupon *= 1.1;
+        if(mallCoupon!=="") mallCoupon *= 1.1;
+        if(usageFee!=="") usageFee *= 1.1;
+        if(etcDeduction!=="") etcDeduction *= 1.1;
+      }
+      var calcNote = m.feeRateCol ? "수수료율 계산(매출×"+(m.feeRatePercent!==false?"%":"소수")+")" : (feeEstimated ? "업체수수료 자동역산(매출-실입금액)" : (netInEstimated ? "실입금액 자동역산(매출-업체수수료)" : "원본매핑"));
+      allRows.push({
+        몰: fileEntry.mallName,
+        주문번호: orderNo,
+        상품명: m.productName ? String(r[m.productName]).trim() : "",
+        옵션값: m.optionValue ? String(r[m.optionValue]).trim() : "",
+        수량: m.qty ? toNum(r[m.qty]) : "",
+        매출: sale,
+        업체수수료: fee,
+        수수료율: sale ? Number((fee/sale*100).toFixed(2)) : "",
+        업체부담쿠폰: sellerCoupon,
+        몰부담쿠폰: mallCoupon,
+        실입금액: netInFinal,
+        수수료계산방식: calcNote
+      });
+    });
+    if(fileEntry.manualAdjustments && fileEntry.manualAdjustments.length>0){
+      fileEntry.manualAdjustments.forEach(function(adj){
+        allRows.push({
+          몰: fileEntry.mallName,
+          주문번호: "[고정추가]"+adj.label,
+          상품명: "", 옵션값: "", 수량: "",
+          매출: 0,
+          업체수수료: adj.amount,
+          수수료율: "",
+          업체부담쿠폰: "", 몰부담쿠폰: "",
+          실입금액: -adj.amount,
+          수수료계산방식: "수동고정추가("+adj.label+")"
+        });
+      });
+    }
+  });
+  lastStandardRows = allRows;
+  renderResult();
+});
+
+function renderResult(){
+  document.getElementById("resultCard").style.display = "block";
+  var rows = lastStandardRows;
+  var mallSet = {};
+  rows.forEach(function(r){ mallSet[r.몰] = (mallSet[r.몰]||0)+1; });
+  var totalSale = rows.reduce(function(s,r){return s+(r.매출||0);},0);
+  var totalFee = rows.reduce(function(s,r){return s+(r.업체수수료||0);},0);
+  var totalNetIn = rows.reduce(function(s,r){return s+(r.실입금액||0);},0);
+
+  document.getElementById("summaryBoxes").innerHTML = [
+    ["총 행 수", rows.length.toLocaleString()+" 행"],
+    ["몰 개수", Object.keys(mallSet).length+" 개"],
+    ["총 매출", fmt(totalSale)+" 원"],
+    ["총 업체수수료", fmt(totalFee)+" 원"],
+    ["총 실입금액", fmt(totalNetIn)+" 원"]
+  ].map(function(x){ return '<div class="sum-box"><div class="lbl">'+x[0]+'</div><div class="val">'+x[1]+'</div></div>'; }).join("")
+   + Object.keys(mallSet).sort().map(function(mn){
+      return '<div class="sum-box"><div class="lbl">'+mn+'</div><div class="val">'+mallSet[mn].toLocaleString()+' 행</div></div>';
+    }).join("");
+
+  var cols = ["몰","주문번호","상품명","옵션값","수량","매출","업체수수료","수수료율","업체부담쿠폰","몰부담쿠폰","실입금액","수수료계산방식"];
+  var numCols = ["수량","매출","업체수수료","업체부담쿠폰","몰부담쿠폰","실입금액"];
+  var html = '<table><thead><tr>'+cols.map(function(c){return '<th>'+c+'</th>';}).join("")+'</tr></thead><tbody>';
+  rows.slice(0,500).forEach(function(r){
+    html += '<tr>'+cols.map(function(c){
+      var v = r[c];
+      var isNum = ["수량","매출","업체수수료","수수료율","업체부담쿠폰","몰부담쿠폰","실입금액"].indexOf(c)>-1;
+      return '<td class="'+(isNum?"num":"")+'">'+(v===""||v===undefined? "" : (isNum && typeof v==="number" ? fmt(v) : v))+'</td>';
+    }).join("")+'</tr>';
+  });
+  var totals = {};
+  numCols.forEach(function(c){ totals[c] = rows.reduce(function(s,r){ return s + (typeof r[c]==="number" ? r[c] : 0); }, 0); });
+  html += '<tr style="background:#fafbfe;font-weight:700;border-top:2px solid var(--border);">'+cols.map(function(c){
+    if(c==="몰") return '<td>합계 ('+rows.length+'행)</td>';
+    if(c==="주문번호" || c==="상품명" || c==="옵션값" || c==="수수료계산방식") return '<td></td>';
+    if(c==="수수료율") return '<td class="num">'+(totals["매출"] ? (totals["업체수수료"]/totals["매출"]*100).toFixed(2) : 0)+'%</td>';
+    return '<td class="num">'+fmt(totals[c]||0)+'</td>';
+  }).join("")+'</tr>';
+  html += '</tbody></table>';
+  if(rows.length>500) html += '<div class="footer-note" style="padding:8px;">미리보기는 상위 500행만 표시됩니다. 전체 데이터는 다운로드 파일에 모두 포함됩니다. (총 '+rows.length+'행)</div>';
+  document.getElementById("previewArea").innerHTML = html;
+}
+
+document.getElementById("exportBtn").addEventListener("click", function(){
+  if(!lastStandardRows) return;
+  var rows = lastStandardRows;
+  var numCols = ["수량","매출","업체수수료","업체부담쿠폰","몰부담쿠폰","실입금액"];
+  var totals = {몰:"합계", 주문번호:"", 상품명:"", 옵션값:""};
+  numCols.forEach(function(c){ totals[c] = rows.reduce(function(s,r){ return s + (typeof r[c]==="number" ? r[c] : 0); }, 0); });
+  totals["수수료율"] = totals["매출"] ? Number((totals["업체수수료"]/totals["매출"]*100).toFixed(2)) : "";
+  var exportRows = rows.concat([totals]);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exportRows), "표준정산_통합");
+  XLSX.writeFile(wb, "표준정산_통합_"+new Date().toISOString().slice(0,10)+".xlsx");
+});
+
+window.__STAGE1_GET_RESULT__ = function(){ return (typeof lastStandardRows !== "undefined") ? lastStandardRows : null; };
+})();
+</script>
+
+<script>
+(function(){
+
+/* ===================== 공통 유틸 ===================== */
+function norm(s){ return (s===undefined||s===null) ? "" : String(s).trim().toUpperCase().replace(/[\s\-_\.\/]/g,""); }
+function toNum(v){
+  if(v===undefined||v===null||v==="") return 0;
+  if(typeof v === "number") return v;
+  var s = String(v).replace(/[,₩원\s]/g,"");
+  var n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+function fmt(n){ return Math.round(n).toLocaleString("ko-KR"); }
+function excelDateToStr(v){
+  if(v===undefined||v===null||v==="") return "";
+  if(typeof v === "number"){
+    var d = XLSX.SSF.parse_date_code(v);
+    if(d) return d.y+"-"+String(d.m).padStart(2,"0")+"-"+String(d.d).padStart(2,"0");
+  }
+  var s = String(v);
+  var m = s.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+  if(m) return m[1]+"-"+m[2].padStart(2,"0")+"-"+m[3].padStart(2,"0");
+  return String(v);
+}
+function daysBetween(a,b){
+  if(!a||!b) return 999;
+  var da = new Date(a), db = new Date(b);
+  if(isNaN(da)||isNaN(db)) return 999;
+  return Math.abs((da-db)/(1000*3600*24));
+}
+function contains(a,b){
+  if(!a||!b) return false;
+  var sa = String(a).replace(/\s/g,"");
+  var sb = String(b).replace(/\s/g,"");
+  return sa.indexOf(sb)>-1 || sb.indexOf(sa)>-1;
+}
+function saveProfile(key, mapping){ try{ localStorage.setItem(key, JSON.stringify(mapping)); }catch(e){} }
+function loadProfile(key){ try{ var v = localStorage.getItem(key); return v?JSON.parse(v):null; }catch(e){ return null; } }
+function parseMallName(raw, enabled){
+  var s = (raw===undefined||raw===null) ? "" : String(raw);
+  if(!enabled) return s.trim();
+  if(s.indexOf(":")>-1){ s = s.split(":").slice(1).join(":"); }
+  s = s.replace(/\([^)]*\)/g,"");
+  return s.trim();
+}
+function loadWorkbookAllSheets(file, cb){
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var wb = XLSX.read(e.target.result, {type:"array", cellDates:false});
+    var sheetsRaw = {};
+    wb.SheetNames.forEach(function(name){
+      sheetsRaw[name] = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, raw:true, defval:""});
+    });
+    cb({fileName:file.name, sheetNames:wb.SheetNames, sheetsRaw:sheetsRaw});
+  };
+  reader.readAsArrayBuffer(file);
+}
+function parseSheetRows(rawRows){
+  var headerIdx = 0, best = -1, bestScore = -1;
+  var scanLimit = Math.min(20, rawRows.length);
+  for(var i=0;i<scanLimit; i++){
+    var rowArr = rawRows[i];
+    var filled = 0, strLike = 0;
+    rowArr.forEach(function(c){
+      if(c==="" || c===undefined || c===null) return;
+      filled++;
+      if(typeof c === "string" && isNaN(parseFloat(c.replace(/[,₩원\s]/g,"")))) strLike++;
+    });
+    if(filled===0) continue;
+    var strRatio = strLike/filled;
+    var score = strRatio>=0.5 ? (1000+filled) : filled;
+    if(score > bestScore){ bestScore = score; headerIdx = i; best = filled; }
+  }
+  var headers = (rawRows[headerIdx]||[]).map(function(h,idx){ return (h===""||h===undefined) ? ("컬럼"+(idx+1)) : String(h).trim(); });
+  var dataRows = rawRows.slice(headerIdx+1).filter(function(r){ return r.some(function(c){return c!=="" && c!==undefined;}); });
+  var objRows = dataRows.map(function(r){
+    var o = {};
+    headers.forEach(function(h,idx){ o[h] = r[idx]; });
+    return o;
+  });
+  return {headers:headers, rows:objRows};
+}
+function pickBestSheet(sheetsRaw, sheetNames){
+  var best = sheetNames[0], bestCount = -1;
+  sheetNames.forEach(function(name){
+    var count = sheetsRaw[name] ? sheetsRaw[name].length : 0;
+    if(count > bestCount){ bestCount = count; best = name; }
+  });
+  return best;
+}
+function setupDropzone(zoneId, inputId){
+  var zone = document.getElementById(zoneId);
+  var input = document.getElementById(inputId);
+  zone.addEventListener("click", function(){ input.click(); });
+  ["dragenter","dragover"].forEach(function(evt){
+    zone.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); zone.classList.add("dragover"); });
+  });
+  ["dragleave","drop"].forEach(function(evt){
+    zone.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); zone.classList.remove("dragover"); });
+  });
+  zone.addEventListener("drop", function(e){
+    var files = e.dataTransfer.files;
+    if(!files || files.length===0) return;
+    input.files = files;
+    input.dispatchEvent(new Event("change"));
+  });
+}
+setupDropzone("erpDropzone","erpFile");
+setupDropzone("stdDropzone","stdFile");
+
+function guessColumn(headers, keywords){
+  for(var k=0;k<keywords.length;k++){
+    for(var i=0;i<headers.length;i++){
+      if(headers[i].replace(/\s/g,"").toLowerCase().indexOf(keywords[k].replace(/\s/g,"").toLowerCase())>-1){
+        return headers[i];
+      }
+    }
+  }
+  return "";
+}
+function renderMapping(container, headers, fields, savedMapping, onChange){
+  var html = '<div class="map-grid">';
+  fields.forEach(function(f){
+    var guessed = (savedMapping && savedMapping[f.key] && headers.indexOf(savedMapping[f.key])>-1) ? savedMapping[f.key] : guessColumn(headers, f.kw);
+    html += '<div class="map-item '+(f.required?'required':'')+'"><label>'+f.label+(f.required?' *':'')+'</label>';
+    html += '<select data-field="'+f.key+'" class="mapSel"><option value="">(사용안함)</option>';
+    headers.forEach(function(h){
+      html += '<option value="'+h.replace(/"/g,'&quot;')+'" '+(h===guessed?'selected':'')+'>'+h+'</option>';
+    });
+    html += '</select></div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+  var sels = container.querySelectorAll(".mapSel");
+  function collect(){
+    var m = {};
+    sels.forEach(function(s){ m[s.getAttribute("data-field")] = s.value; });
+    onChange(m);
+  }
+  sels.forEach(function(s){ s.addEventListener("change", collect); });
+  collect();
+}
+
+/* ===================== 필드 정의 ===================== */
+var ERP_FIELDS = [
+  {key:"orderNo", label:"주문번호", required:true, kw:["주문번호","주문 번호","오더번호","ordernumber","orderno"]},
+  {key:"mall", label:"몰(채널) - 매출구분", required:true, kw:["매출구분","몰","채널","판매처","쇼핑몰"]},
+  {key:"productName", label:"상품명(주문상품명)", required:false, kw:["주문상품명","상품명","제품명"]},
+  {key:"optionValue", label:"옵션(규격)", required:false, kw:["주문상품 규격","옵션","규격"]},
+  {key:"qty", label:"수량", required:false, kw:["수량","qty"]},
+  {key:"sale", label:"매출(실판매가 합계)", required:true, kw:["금액","실판매","판매금액","결제금액"]},
+  {key:"unitCost", label:"매입원가(단가)", required:false, kw:["원가","매입가","매입단가"]},
+  {key:"totalCost", label:"매입원가(합계/총액)", required:false, kw:["원가금액","총원가","원가합계","원가총액"]},
+  {key:"date", label:"날짜", required:false, kw:["날짜","주문일","판매일","order date"]}
+];
+
+/* ===================== 전역 상태 ===================== */
+var state = { erp:null, std:null };
+
+/* ===================== 매핑 UI 렌더 ===================== */
+function renderMallPreview(){
+  var area = document.getElementById("erpMallPreviewArea");
+  if(!state.erp || !state.erp.mapping.mall){ area.innerHTML = ""; return; }
+  var col = state.erp.mapping.mall;
+  var existingToggle = document.getElementById("mallParseToggle");
+  var enabled = existingToggle ? existingToggle.checked : true;
+  var counts = {};
+  state.erp.rows.forEach(function(r){
+    var key = r[col]===undefined ? "" : String(r[col]);
+    counts[key] = (counts[key]||0)+1;
+  });
+  var keys = Object.keys(counts).sort(function(a,b){ return counts[b]-counts[a]; });
+  var html = '<div class="footer-note" style="margin:10px 0 6px;">🔍 몰(채널) 값 미리보기 — 표준정산 파일의 몰 이름과 정확히 일치해야 매칭됩니다</div>';
+  html += '<label class="flex" style="margin-bottom:8px;font-size:13px;"><input type="checkbox" id="mallParseToggle" '+(enabled?'checked':'')+' style="width:auto;"> 정제 규칙 사용: 콜론(:) 뒤 텍스트 + 괄호() 내용 제거</label>';
+  html += '<div class="scrollbox" style="max-height:220px;"><table><thead><tr><th>원본 값</th><th class="num">건수</th><th>정제 결과 → 매칭용 몰 이름</th></tr></thead><tbody>';
+  keys.slice(0,50).forEach(function(k){
+    html += '<tr><td>'+k+'</td><td class="num">'+counts[k]+'</td><td><b>'+parseMallName(k, enabled)+'</b></td></tr>';
+  });
+  html += '</tbody></table></div>';
+  area.innerHTML = html;
+  document.getElementById("mallParseToggle").addEventListener("change", renderMallPreview);
+}
+
+document.getElementById("erpFile").addEventListener("change", function(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  loadWorkbookAllSheets(file, function(wbRes){
+    var defaultSheet = pickBestSheet(wbRes.sheetsRaw, wbRes.sheetNames);
+    function renderForSheet(sheetName){
+      var parsed = parseSheetRows(wbRes.sheetsRaw[sheetName]);
+      var saved = loadProfile("erpMappingProfile_s2");
+      var area = document.getElementById("erpMapArea");
+      var sheetSelectHtml = "";
+      if(wbRes.sheetNames.length>1){
+        sheetSelectHtml = '<div class="footer-note" style="margin-bottom:8px;">시트 선택: <select id="erpSheetSel">'+
+          wbRes.sheetNames.map(function(n){ return '<option value="'+n+'" '+(n===sheetName?'selected':'')+'>'+n+' ('+wbRes.sheetsRaw[n].length+'행)</option>'; }).join("")+
+          '</select></div>';
+      }
+      area.innerHTML = sheetSelectHtml + '<div class="footer-note" style="margin-bottom:8px;">'+wbRes.fileName+' · '+parsed.rows.length+'행 인식됨</div><div id="erpMapInner"></div>';
+      renderMapping(document.getElementById("erpMapInner"), parsed.headers, ERP_FIELDS, saved, function(mapping){
+        state.erp = {headers:parsed.headers, rows:parsed.rows, mapping:mapping};
+        saveProfile("erpMappingProfile_s2", mapping);
+        renderMallPreview();
+        checkReady();
+      });
+      if(wbRes.sheetNames.length>1){
+        document.getElementById("erpSheetSel").addEventListener("change", function(ev){ renderForSheet(ev.target.value); });
+      }
+    }
+    renderForSheet(defaultSheet);
+  });
+});
+
+document.getElementById("stdFile").addEventListener("change", function(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  loadWorkbookAllSheets(file, function(wbRes){
+    var sheetName = pickBestSheet(wbRes.sheetsRaw, wbRes.sheetNames);
+    var parsed = parseSheetRows(wbRes.sheetsRaw[sheetName]);
+    state.std = {rows:parsed.rows};
+    document.getElementById("stdStatus").textContent = "✅ "+wbRes.fileName+" · "+parsed.rows.length+"행 로드됨 (몰 "+(new Set(parsed.rows.map(function(r){return r["몰"];}))).size+"개)";
+    checkReady();
+  });
+});
+
+function checkReady(){
+  var ready = state.erp && state.erp.mapping.orderNo && state.erp.mapping.mall && state.erp.mapping.sale && state.std;
+  document.getElementById("runMatchBtn").disabled = !ready;
+  document.getElementById("s2_preStatus").textContent = ready ? "매칭 실행 준비 완료" : "ERP 필수 매핑(주문번호/몰/매출)과 표준정산 파일 업로드를 완료해주세요.";
+}
+
+/* ===================== 매칭 & 손익계산 ===================== */
+document.getElementById("runMatchBtn").addEventListener("click", runMatching);
+var lastResult = null;
+
+function buildErpRecords(){
+  var m = state.erp.mapping;
+  var toggle = document.getElementById("mallParseToggle");
+  var mallParseEnabled = toggle ? toggle.checked : true;
+  return state.erp.rows.map(function(r){
+    var qty = m.qty ? toNum(r[m.qty]) : 1;
+    var unitCost = m.unitCost ? toNum(r[m.unitCost]) : 0;
+    var totalCost = m.totalCost ? toNum(r[m.totalCost]) : (unitCost * (qty||1));
+    return {
+      orderNo: m.orderNo ? String(r[m.orderNo]) : "",
+      orderNoNorm: norm(m.orderNo ? r[m.orderNo] : ""),
+      mall: m.mall ? parseMallName(r[m.mall], mallParseEnabled) : "",
+      productName: m.productName ? String(r[m.productName]).trim() : "",
+      optionValue: m.optionValue ? String(r[m.optionValue]).trim() : "",
+      qty: qty,
+      sale: m.sale ? toNum(r[m.sale]) : 0,
+      cost: totalCost,
+      date: m.date ? excelDateToStr(r[m.date]) : ""
+    };
+  }).filter(function(x){ return x.orderNoNorm !== ""; });
+}
+function buildStdRecords(){
+  return state.std.rows.map(function(r){
+    return {
+      mall: r["몰"] ? String(r["몰"]).trim() : "",
+      orderNo: r["주문번호"] ? String(r["주문번호"]) : "",
+      orderNoNorm: norm(r["주문번호"]),
+      productName: r["상품명"] ? String(r["상품명"]).trim() : "",
+      optionValue: r["옵션값"] ? String(r["옵션값"]).trim() : "",
+      qty: toNum(r["수량"]),
+      sale: toNum(r["매출"]),
+      fee: toNum(r["업체수수료"]),
+      sellerCoupon: toNum(r["업체부담쿠폰"]),
+      mallCoupon: toNum(r["몰부담쿠폰"]),
+      usageFee: toNum(r["이용수수료"]),
+      etcDeduction: toNum(r["기타공제"]),
+      netIn: toNum(r["실입금액"]),
+      date: r["날짜"] ? excelDateToStr(r["날짜"]) : ""
+    };
+  }).filter(function(x){ return x.orderNoNorm !== ""; });
+}
+function groupByOrder(records){
+  var map = {};
+  records.forEach(function(r){
+    var key = r.mall + "||" + r.orderNoNorm;
+    if(!map[key]) map[key] = [];
+    map[key].push(r);
+  });
+  return map;
+}
+
+function runMatching(){
+  var tolPct = toNum(document.getElementById("tolPct").value)/100;
+
+  var erpRecords = buildErpRecords();
+  var stdRecords = buildStdRecords();
+
+  var erpGroups = groupByOrder(erpRecords);
+  var stdGroups = groupByOrder(stdRecords);
+  var erpKeys = Object.keys(erpGroups);
+  var stdKeys = Object.keys(stdGroups);
+
+  var matched = [];
+
+  erpKeys.forEach(function(key){
+    var stdList = stdGroups[key];
+    if(!stdList || stdList.length===0) return; // 주문번호 자체가 표준정산에 없음 -> 나중에 보조매칭 대상
+
+    var remErp = erpGroups[key].slice();
+    var remStd = stdList.slice();
+
+    if(remErp.length===1 && remStd.length===1){
+      matched.push({erp:remErp[0], std:remStd[0], matchType:"단일상품매칭"});
+      remErp = []; remStd = [];
+    } else {
+      // ① 상품명+옵션값 정확매칭
+      remErp = remErp.filter(function(e){
+        var idx = remStd.findIndex(function(s){
+          return e.productName && s.productName && contains(e.productName,s.productName) &&
+                 e.optionValue && s.optionValue && contains(e.optionValue,s.optionValue);
+        });
+        if(idx>-1){ matched.push({erp:e, std:remStd[idx], matchType:"완전매칭"}); remStd.splice(idx,1); return false; }
+        return true;
+      });
+      // ② 상품명만 매칭
+      remErp = remErp.filter(function(e){
+        var idx = remStd.findIndex(function(s){ return e.productName && s.productName && contains(e.productName,s.productName); });
+        if(idx>-1){ matched.push({erp:e, std:remStd[idx], matchType:"상품명매칭"}); remStd.splice(idx,1); return false; }
+        return true;
+      });
+      // ③ 개수가 같으면 순서대로
+      if(remErp.length>0 && remErp.length===remStd.length){
+        remErp.forEach(function(e,i){ matched.push({erp:e, std:remStd[i], matchType:"순서매칭(확인필요)"}); });
+        remErp = []; remStd = [];
+      }
+    }
+    erpGroups[key] = remErp;
+    stdGroups[key] = remStd;
+  });
+
+  // ④ 그룹(주문번호) 자체가 안 맞는 건들 + 위에서 못 맞춘 잔여건 -> 몰 전체에서 상품명+옵션값+금액 보조매칭
+  var remainingErpLines = [];
+  erpKeys.forEach(function(key){ (erpGroups[key]||[]).forEach(function(e){ remainingErpLines.push(e); }); });
+  var remainingStdLines = [];
+  stdKeys.forEach(function(key){ (stdGroups[key]||[]).forEach(function(s){ remainingStdLines.push(s); }); });
+
+  remainingErpLines.forEach(function(e){
+    var idx = remainingStdLines.findIndex(function(s){
+      if(s._used || s.mall !== e.mall) return false;
+      var nameOk = (!e.productName || !s.productName) ? true : contains(e.productName, s.productName);
+      var optOk = (!e.optionValue || !s.optionValue) ? true : contains(e.optionValue, s.optionValue);
+      var target = e.sale || e.cost || 1;
+      var amtOk = Math.abs(s.sale - e.sale) <= Math.max(target*tolPct, 1);
+      return nameOk && optOk && amtOk;
+    });
+    if(idx>-1){
+      remainingStdLines[idx]._used = true;
+      e._used = true;
+      matched.push({erp:e, std:remainingStdLines[idx], matchType:"보조매칭(주문번호 불일치)"});
+    }
+  });
+
+  var erpOnly = remainingErpLines.filter(function(e){ return !e._used; });
+  var stdOnly = remainingStdLines.filter(function(s){ return !s._used; });
+
+  var MATCH_QUALITY = {
+    "완전매칭":"ok", "단일상품매칭":"ok", "상품명매칭":"ok",
+    "순서매칭(확인필요)":"warn", "보조매칭(주문번호 불일치)":"warn"
+  };
+
+  var flags = [];
+  matched.forEach(function(m){
+    m.sale = m.std.sale || 0;
+    m.cost = m.erp.cost || 0;
+    m.profit = m.sale - m.cost;
+    m.margin = m.sale ? (m.profit/m.sale*100) : 0;
+    m.quality = MATCH_QUALITY[m.matchType] || "warn";
+    if(m.cost > m.sale && m.sale>0){
+      flags.push({type:"음수마진", mall:m.erp.mall, orderNo:m.erp.orderNo, detail:"매출원가("+fmt(m.cost)+")가 매출("+fmt(m.sale)+")보다 큽니다."});
+    }
+    if(m.erp.sale>0 && m.sale>0){
+      var ratio = m.sale / m.erp.sale;
+      if(ratio > 5 || ratio < 0.2){
+        flags.push({type:"금액 배율 이상", mall:m.erp.mall, orderNo:m.erp.orderNo, detail:"ERP 매출("+fmt(m.erp.sale)+") 대비 표준정산 매출("+fmt(m.sale)+") 비율이 비정상적입니다."});
+      }
+    }
+    if(m.matchType==="순서매칭(확인필요)"){
+      flags.push({type:"매칭 확인 필요", mall:m.erp.mall, orderNo:m.erp.orderNo, detail:"한 주문에 상품이 여러 개라 상품명/옵션으로 못 가려서 순서대로 짝지었습니다. 직접 확인해주세요."});
+    }
+  });
+
+  var mallSet = {};
+  matched.forEach(function(m){ mallSet[m.erp.mall] = true; });
+  erpOnly.forEach(function(m){ mallSet[m.mall] = true; });
+  stdOnly.forEach(function(m){ mallSet[m.mall] = true; });
+  var mallSummary = Object.keys(mallSet).sort().map(function(mall){
+    var mm = matched.filter(function(m){ return m.erp.mall===mall; });
+    var sale = mm.reduce(function(s,m){return s+m.sale;},0);
+    var fee = mm.reduce(function(s,m){return s+(m.std.fee||0);},0);
+    var cost = mm.reduce(function(s,m){return s+m.cost;},0);
+    var netIn = mm.reduce(function(s,m){return s+(m.std.netIn||0);},0);
+    var profit = sale - cost;
+    var netSaleIn = sale - fee;
+    var deduction = netSaleIn - netIn;
+    return {
+      mall: mall,
+      count: mm.length,
+      erpOnlyCount: erpOnly.filter(function(m){return m.mall===mall;}).length,
+      stdOnlyCount: stdOnly.filter(function(m){return m.mall===mall;}).length,
+      sale: sale, saleExVat: sale/1.1,
+      cost: cost, costExVat: cost/1.1,
+      profit: profit, profitExVat: profit/1.1,
+      profitRate: sale ? profit/sale : 0,
+      fee: fee, feeExVat: fee/1.1,
+      feeRate: sale ? fee/sale : 0,
+      netSaleIn: netSaleIn,
+      deduction: deduction, deductionExVat: deduction/1.1,
+      afterDeduction: netSaleIn - deduction,
+      netIn: netIn
+    };
+  });
+
+  lastResult = {matched:matched, erpOnly:erpOnly, stdOnly:stdOnly, mallSummary:mallSummary, flags:flags};
+  renderResult();
+}
+
+function renderResult(){
+  var r = lastResult;
+  document.getElementById("s2_resultCard").style.display = "block";
+
+  var totalSale = r.mallSummary.reduce(function(s,m){return s+m.sale;},0);
+  var totalCost = r.mallSummary.reduce(function(s,m){return s+m.cost;},0);
+  var totalProfit = totalSale-totalCost;
+  var totalNetIn = r.mallSummary.reduce(function(s,m){return s+m.netIn;},0);
+  var qualityCount = { ok:0, warn:0 };
+  r.matched.forEach(function(m){ qualityCount[m.quality] = (qualityCount[m.quality]||0)+1; });
+  var stdOnlySale = r.stdOnly.reduce(function(s,x){return s+(x.sale||0);},0);
+  var erpOnlySale = r.erpOnly.reduce(function(s,x){return s+(x.sale||0);},0);
+
+  document.getElementById("s2_summaryBoxes").innerHTML = [
+    ["매칭 건수", r.matched.length.toLocaleString()+" 건"],
+    ["🟢 확실한 매칭", qualityCount.ok+" 건"],
+    ["🟡 확인 필요(순서/보조매칭)", qualityCount.warn+" 건"],
+    ["총 매출(매칭분)", fmt(totalSale)+" 원"],
+    ["총 매출원가", fmt(totalCost)+" 원"],
+    ["총 매출이익", fmt(totalProfit)+" 원"],
+    ["평균 매출이익율", (totalSale? (totalProfit/totalSale*100):0).toFixed(1)+" %"],
+    ["총 실입금액", fmt(totalNetIn)+" 원"],
+    ["🔴 미매칭(ERP) 건수/매출", r.erpOnly.length+"건 / "+fmt(erpOnlySale)+"원"],
+    ["🔴 미매칭(표준정산) 건수/매출", r.stdOnly.length+"건 / "+fmt(stdOnlySale)+"원"],
+    ["✅ 검산: 매칭매출+미매칭매출", fmt(totalSale+stdOnlySale)+" 원 (1단계 총매출과 비교)"],
+    ["⚠ 이상치", r.flags.length+" 건"]
+  ].map(function(x){
+    return '<div class="sum-box"><div class="lbl">'+x[0]+'</div><div class="val">'+x[1]+'</div></div>';
+  }).join("");
+
+  document.querySelectorAll("#resultTabs .tab").forEach(function(t){
+    t.onclick = function(){
+      document.querySelectorAll("#resultTabs .tab").forEach(function(x){x.classList.remove("active");});
+      t.classList.add("active");
+      renderTab(t.getAttribute("data-tab"));
+    };
+  });
+  renderTab("mallSummary");
+}
+
+function renderTab(tab){
+  var r = lastResult;
+  var html = "";
+  if(tab==="mallSummary"){
+    html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th class="num">매칭건수</th><th class="num">매출</th><th class="num">매출(-VAT)</th><th class="num">매출원가</th><th class="num">매출원가(-VAT)</th><th class="num">매출이익</th><th class="num">매출이익(-VAT)</th><th class="num">매출이익율</th><th class="num">수수료</th><th class="num">수수료(-VAT)</th><th class="num">수수료율</th><th class="num">판매입금액</th><th class="num">공제금액</th><th class="num">공제금액(-VAT)</th><th class="num">공제금액차감후입금액</th><th class="num">실입금액</th></tr></thead><tbody>';
+    r.mallSummary.forEach(function(m){
+      html += '<tr><td>'+m.mall+'</td><td class="num">'+m.count+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.saleExVat)+'</td><td class="num">'+fmt(m.cost)+'</td><td class="num">'+fmt(m.costExVat)+'</td><td class="num">'+fmt(m.profit)+'</td><td class="num">'+fmt(m.profitExVat)+'</td><td class="num">'+(m.profitRate*100).toFixed(1)+'%</td><td class="num">'+fmt(m.fee)+'</td><td class="num">'+fmt(m.feeExVat)+'</td><td class="num">'+(m.feeRate*100).toFixed(1)+'%</td><td class="num">'+fmt(m.netSaleIn)+'</td><td class="num">'+fmt(m.deduction)+'</td><td class="num">'+fmt(m.deductionExVat)+'</td><td class="num">'+fmt(m.afterDeduction)+'</td><td class="num">'+fmt(m.netIn)+'</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  } else if(tab==="matched"){
+    html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th>주문번호</th><th>매칭방식</th><th>상품명</th><th class="num">매출</th><th class="num">매출원가</th><th class="num">매출이익</th><th class="num">이익율</th><th class="num">실입금액</th></tr></thead><tbody>';
+    if(r.matched.length===0) html += '<tr><td colspan="9" class="empty">매칭된 건이 없습니다</td></tr>';
+    r.matched.forEach(function(m){
+      html += '<tr><td>'+m.erp.mall+'</td><td>'+m.erp.orderNo+'</td><td><span class="pill '+m.quality+'">'+m.matchType+'</span></td><td>'+(m.erp.productName||m.std.productName||"")+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.cost)+'</td><td class="num">'+fmt(m.profit)+'</td><td class="num">'+m.margin.toFixed(1)+'%</td><td class="num">'+fmt(m.std.netIn)+'</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  } else if(tab==="erpOnly"){
+    html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th>주문번호</th><th>상품명</th><th class="num">매출</th><th class="num">원가</th><th>날짜</th></tr></thead><tbody>';
+    if(r.erpOnly.length===0) html += '<tr><td colspan="6" class="empty">미매칭 건이 없습니다</td></tr>';
+    r.erpOnly.forEach(function(m){
+      html += '<tr><td>'+m.mall+'</td><td>'+m.orderNo+'</td><td>'+m.productName+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.cost)+'</td><td>'+m.date+'</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  } else if(tab==="stdOnly"){
+    html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th>주문번호</th><th>상품명</th><th class="num">매출</th><th class="num">실입금액</th><th>날짜</th></tr></thead><tbody>';
+    if(r.stdOnly.length===0) html += '<tr><td colspan="6" class="empty">미매칭 건이 없습니다</td></tr>';
+    r.stdOnly.forEach(function(m){
+      html += '<tr><td>'+m.mall+'</td><td>'+m.orderNo+'</td><td>'+m.productName+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.netIn)+'</td><td>'+m.date+'</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  } else if(tab==="flags"){
+    html += '<div class="scrollbox"><table><thead><tr><th>유형</th><th>몰</th><th>주문번호</th><th>상세</th></tr></thead><tbody>';
+    if(r.flags.length===0) html += '<tr><td colspan="4" class="empty">발견된 이상치가 없습니다</td></tr>';
+    r.flags.forEach(function(f){
+      html += '<tr class="row-flag"><td><span class="pill bad">'+f.type+'</span></td><td>'+f.mall+'</td><td>'+f.orderNo+'</td><td>'+f.detail+'</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  document.getElementById("tabContent").innerHTML = html;
+}
+
+document.getElementById("s2_exportBtn").addEventListener("click", function(){
+  var r = lastResult;
+  if(!r) return;
+  var wb = XLSX.utils.book_new();
+
+  var summarySheet = r.mallSummary.map(function(m){
+    return {"몰":m.mall,"매칭건수":m.count,"미매칭(ERP)":m.erpOnlyCount,"미매칭(표준정산)":m.stdOnlyCount,
+      "매출":m.sale, "매출 (-VAT)":m.saleExVat,
+      "매출원가":m.cost, "매출원가 (-VAT)":m.costExVat,
+      "매출이익":m.profit, "매출이익 (-VAT)":m.profitExVat, "매출이익율":Number((m.profitRate*100).toFixed(2)),
+      "수수료":m.fee, "수수료 (-VAT)":m.feeExVat, "수수료율":Number((m.feeRate*100).toFixed(2)),
+      "판매입금액":m.netSaleIn,
+      "공제금액":m.deduction, "공제금액 (-VAT)":m.deductionExVat,
+      "공제금액 차감후 입금액":m.afterDeduction,
+      "실입금액":m.netIn};
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summarySheet), "몰별 손익요약");
+
+  var matchedSheet = r.matched.map(function(m){
+    return {"몰":m.erp.mall,"주문번호":m.erp.orderNo,"매칭방식":m.matchType,
+      "상품명":m.erp.productName||m.std.productName||"","매출":m.sale,"매출원가":m.cost,"매출이익":m.profit,
+      "이익율(%)":Number(m.margin.toFixed(2)),"수수료":m.std.fee,"실입금액":m.std.netIn,"날짜":m.erp.date};
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(matchedSheet), "매칭상세");
+
+  var erpOnlySheet = r.erpOnly.map(function(m){
+    return {"몰":m.mall,"주문번호":m.orderNo,"상품명":m.productName,"매출":m.sale,"원가":m.cost,"날짜":m.date};
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(erpOnlySheet), "ERP미매칭");
+
+  var stdOnlySheet = r.stdOnly.map(function(m){
+    return {"몰":m.mall,"주문번호":m.orderNo,"상품명":m.productName,"매출":m.sale,"실입금액":m.netIn,"날짜":m.date};
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stdOnlySheet), "표준정산미매칭");
+
+  var flagSheet = r.flags.map(function(f){ return {"유형":f.type,"몰":f.mall,"주문번호":f.orderNo,"상세":f.detail}; });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(flagSheet), "이상치점검");
+
+  XLSX.writeFile(wb, "매칭_손익결과_"+new Date().toISOString().slice(0,10)+".xlsx");
+});
+
+document.getElementById("handoffBtn").addEventListener("click", function(){
+  var statusEl = document.getElementById("handoffStatus");
+  var rows = window.__STAGE1_GET_RESULT__ ? window.__STAGE1_GET_RESULT__() : null;
+  if(!rows || rows.length===0){ statusEl.textContent = "⚠️ 1단계에서 먼저 '표준화 변환 실행'을 완료해주세요."; return; }
+  state.std = {rows: rows};
+  document.getElementById("stdStatus").textContent = "✅ 1단계 결과 "+rows.length+"행 바로 가져옴 (몰 "+(new Set(rows.map(function(r){return r["몰"];}))).size+"개)";
+  statusEl.textContent = "✅ 가져오기 완료!";
+  checkReady();
+});
+})();
+</script>
+</body>
+</html>
