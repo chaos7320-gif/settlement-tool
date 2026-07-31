@@ -1803,7 +1803,7 @@ document.getElementById("saveDashBtn").addEventListener("click", async function(
     }
     var totalSale = r.mallSummary.reduce(function(s,m){return s+m.sale;},0);
     var totalCost = r.mallSummary.reduce(function(s,m){return s+m.cost;},0);
-    var totalNetIn = r.mallSummary.reduce(function(s,m){return s+m.netIn;},0);
+    var totalNetIn = r.mallSummary.reduce(function(s,m){return s+m.netInTotal;},0);
     data.months[month] = {
       mallSummary: r.mallSummary,
       totals: { sale: totalSale, cost: totalCost, profit: totalSale-totalCost, netIn: totalNetIn },
@@ -1835,7 +1835,7 @@ function monthTotals(monthData){
   if(monthData.totals) return monthData.totals;
   var sale = monthData.mallSummary.reduce(function(s,m){return s+m.sale;},0);
   var cost = monthData.mallSummary.reduce(function(s,m){return s+m.cost;},0);
-  var netIn = monthData.mallSummary.reduce(function(s,m){return s+m.netIn;},0);
+  var netIn = monthData.mallSummary.reduce(function(s,m){return s+(m.netInTotal!==undefined?m.netInTotal:m.netIn);},0);
   return {sale:sale, cost:cost, profit:sale-cost, netIn:netIn};
 }
 
