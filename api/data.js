@@ -1,4 +1,4 @@
-import { put, list, del } from '@vercel/blob';
+import { put, list, del, get } from '@vercel/blob';
 
 const BLOB_PREFIX = 'settlement-dashboard-data';
 
@@ -30,10 +30,10 @@ export default async function handler(req, res) {
       const { blobs } = await list({ prefix: BLOB_PREFIX });
       if (!blobs.length) return res.status(200).json(null);
       blobs.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
-      const r = await fetch(blobs[0].url + '?t=' + Date.now(), { cache: 'no-store' });
-      if (!r.ok) return res.status(200).json(null);
-      const data = await r.json();
-      return res.status(200).json(data);
+      const result = await get(blobs[0].url, { access: 'private', useCache: false });
+      if (!result || !result.stream) return res.status(200).json(null);
+      const text = await new Response(result.stream).text();
+      return res.status(200).json(JSON.parse(text));
     } catch (e) {
       console.error('Load error:', e);
       return res.status(200).json(null);
@@ -47,7 +47,7 @@ export default async function handler(req, res) {
       const { blobs: old } = await list({ prefix: BLOB_PREFIX });
       if (old.length) await del(old.map(b => b.url));
       await put(BLOB_PREFIX + '.json', payload, {
-        access: 'public',
+        access: 'private',
         addRandomSuffix: true,
         contentType: 'application/json',
       });
