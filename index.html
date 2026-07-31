@@ -1586,7 +1586,8 @@ function runMatching(){
   matched.forEach(function(m){
     m.sale = m.std.sale || 0;
     m.cost = m.erp.cost || 0;
-    m.profit = m.sale - m.cost;
+    m.fee = m.std.fee || 0;
+    m.profit = m.sale - m.cost - m.fee;
     m.margin = m.sale ? (m.profit/m.sale*100) : 0;
     m.quality = MATCH_QUALITY[m.matchType] || "warn";
     if(m.cost > m.sale && m.sale>0){
@@ -1615,7 +1616,7 @@ function runMatching(){
     var cost = mm.reduce(function(s,m){return s+m.cost;},0);
     var netIn = mm.reduce(function(s,m){return s+(m.std.netIn||0);},0);
     var stdOnlyNetIn = mallStdOnly.reduce(function(s,m){return s+(m.netIn||0);},0);
-    var profit = sale - cost;
+    var profit = sale - cost - fee;
     var netSaleIn = sale - fee;
     var deduction = netSaleIn - netIn;
     return {
@@ -1648,7 +1649,7 @@ function renderResult(){
 
   var totalSale = r.mallSummary.reduce(function(s,m){return s+m.sale;},0);
   var totalCost = r.mallSummary.reduce(function(s,m){return s+m.cost;},0);
-  var totalProfit = totalSale-totalCost;
+  var totalProfit = r.mallSummary.reduce(function(s,m){return s+m.profit;},0);
   var totalNetIn = r.mallSummary.reduce(function(s,m){return s+m.netIn;},0);
   var totalStdOnlyNetIn = r.mallSummary.reduce(function(s,m){return s+m.stdOnlyNetIn;},0);
   var qualityCount = { ok:0, warn:0 };
@@ -1849,10 +1850,11 @@ document.getElementById("saveDashBtn").addEventListener("click", async function(
     }
     var totalSale = r.mallSummary.reduce(function(s,m){return s+m.sale;},0);
     var totalCost = r.mallSummary.reduce(function(s,m){return s+m.cost;},0);
+    var totalProfit = r.mallSummary.reduce(function(s,m){return s+m.profit;},0);
     var totalNetIn = r.mallSummary.reduce(function(s,m){return s+m.netInTotal;},0);
     data.months[month] = {
       mallSummary: r.mallSummary,
-      totals: { sale: totalSale, cost: totalCost, profit: totalSale-totalCost, netIn: totalNetIn },
+      totals: { sale: totalSale, cost: totalCost, profit: totalProfit, netIn: totalNetIn },
       savedAt: new Date().toISOString()
     };
     await saveDashData(data);
@@ -1881,8 +1883,9 @@ function monthTotals(monthData){
   if(monthData.totals) return monthData.totals;
   var sale = monthData.mallSummary.reduce(function(s,m){return s+m.sale;},0);
   var cost = monthData.mallSummary.reduce(function(s,m){return s+m.cost;},0);
+  var fee = monthData.mallSummary.reduce(function(s,m){return s+(m.fee||0);},0);
   var netIn = monthData.mallSummary.reduce(function(s,m){return s+(m.netInTotal!==undefined?m.netInTotal:m.netIn);},0);
-  return {sale:sale, cost:cost, profit:sale-cost, netIn:netIn};
+  return {sale:sale, cost:cost, profit:sale-cost-fee, netIn:netIn};
 }
 
 function renderDashboard(data){
