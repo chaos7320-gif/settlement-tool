@@ -245,7 +245,7 @@
     <h2><span class="step-badge">3</span> 매칭 실행</h2>
     <div class="formula">
       매칭 순서 &nbsp;① 몰+주문번호 그룹 안에서 <b>상품명+옵션값 정확매칭</b> → ② 남은 건 <b>상품명만 매칭</b> → ③ 그래도 남았는데 개수가 같으면 <b>순서대로 매칭(확인 필요)</b> → ④ 그룹 자체가 안 맞으면 <b>상품명+옵션값+금액</b>으로 몰 전체에서 보조매칭 → ⑤ 그래도 없으면 미매칭<br>
-      매출이익 계산식 &nbsp;<b>매출이익 = 매출 − 매출원가</b> &nbsp;|&nbsp; (-VAT) 항목은 ÷1.1 &nbsp;|&nbsp; 매출·수수료·실입금액은 표준정산 파일 값, 매출원가는 ERP 값 사용
+      영업이익 계산식 &nbsp;<b>영업이익 = 실입금액(정산금액) − 매출원가</b> &nbsp;(실입금액은 몰 수수료가 이미 빠진 금액이라 별도로 수수료를 또 차감하지 않음) &nbsp;|&nbsp; (-VAT) 항목은 ÷1.1 &nbsp;|&nbsp; 매출·수수료·실입금액은 표준정산 파일 값, 매출원가는 ERP 값 사용
     </div>
     <div class="tolerance">
       <label>보조매칭 금액 오차: <input type="number" id="tolPct" value="5" min="0"> %</label>
@@ -302,7 +302,7 @@
 
     <div class="chart-grid">
       <div class="chart-card">
-        <h3 class="chart-title">월별 매출 &amp; 매출이익 추이</h3>
+        <h3 class="chart-title">월별 매출 &amp; 영업이익 추이</h3>
         <div class="chart-box"><canvas id="dashTrendChart"></canvas></div>
       </div>
       <div class="chart-card">
@@ -312,7 +312,7 @@
     </div>
 
     <div class="chart-card" style="margin-bottom:14px;">
-      <h3 class="chart-title">몰별 누적 매출이익 (Top 10)</h3>
+      <h3 class="chart-title">몰별 누적 영업이익 (Top 10)</h3>
       <div class="chart-box small"><canvas id="dashMallBar"></canvas></div>
     </div>
 
@@ -320,7 +320,7 @@
       <h2><span class="step-badge">·</span> 월별 저장 이력</h2>
       <div class="scrollbox">
         <table>
-          <thead><tr><th>귀속월</th><th class="num">매출</th><th class="num">매출원가</th><th class="num">매출이익</th><th class="num">매출이익율</th><th class="num">실입금액</th><th>저장시각</th><th></th></tr></thead>
+          <thead><tr><th>귀속월</th><th class="num">매출</th><th class="num">매출원가</th><th class="num">영업이익</th><th class="num">영업이익율</th><th class="num">실입금액</th><th>저장시각</th><th></th></tr></thead>
           <tbody id="dashHistoryBody"></tbody>
         </table>
       </div>
@@ -1587,8 +1587,11 @@ function runMatching(){
     m.sale = m.std.sale || 0;
     m.cost = m.erp.cost || 0;
     m.fee = m.std.fee || 0;
-    m.profit = m.sale - m.cost - m.fee;
-    m.margin = m.sale ? (m.profit/m.sale*100) : 0;
+    m.netIn = m.std.netIn || 0;
+    // 실입금액(정산금액)은 몰이 채널수수료를 이미 뺀 뒤 실제로 입금해준 돈이라, 매출-원가에서
+    // 수수료를 또 빼면 이중차감이 된다. 그래서 영업이익은 실입금액 기준으로 계산한다.
+    m.profit = m.netIn - m.cost;
+    m.margin = m.netIn ? (m.profit/m.netIn*100) : 0;
     m.quality = MATCH_QUALITY[m.matchType] || "warn";
     if(m.cost > m.sale && m.sale>0){
       flags.push({type:"음수마진", mall:m.erp.mall, orderNo:m.erp.orderNo, detail:"매출원가("+fmt(m.cost)+")가 매출("+fmt(m.sale)+")보다 큽니다."});
@@ -1616,7 +1619,10 @@ function runMatching(){
     var cost = mm.reduce(function(s,m){return s+m.cost;},0);
     var netIn = mm.reduce(function(s,m){return s+(m.std.netIn||0);},0);
     var stdOnlyNetIn = mallStdOnly.reduce(function(s,m){return s+(m.netIn||0);},0);
-    var profit = sale - cost - fee;
+    var netInTotal = netIn + stdOnlyNetIn;
+    // 영업이익 = 실입금액(채널수수료 이미 차감된 실제 입금액, 매칭+미매칭 전체) - 매출원가.
+    // 매출-원가-수수료로 또 계산하면 수수료가 이중으로 빠져서 이익이 과소계상된다.
+    var profit = netInTotal - cost;
     var netSaleIn = sale - fee;
     var deduction = netSaleIn - netIn;
     return {
@@ -1627,7 +1633,7 @@ function runMatching(){
       sale: sale, saleExVat: sale/1.1,
       cost: cost, costExVat: cost/1.1,
       profit: profit, profitExVat: profit/1.1,
-      profitRate: sale ? profit/sale : 0,
+      profitRate: netInTotal ? profit/netInTotal : 0,
       fee: fee, feeExVat: fee/1.1,
       feeRate: sale ? fee/sale : 0,
       netSaleIn: netSaleIn,
@@ -1635,7 +1641,7 @@ function runMatching(){
       afterDeduction: netSaleIn - deduction,
       netIn: netIn,
       stdOnlyNetIn: stdOnlyNetIn,
-      netInTotal: netIn + stdOnlyNetIn
+      netInTotal: netInTotal
     };
   });
 
@@ -1661,10 +1667,10 @@ function renderResult(){
     ["매칭 건수", r.matched.length.toLocaleString()+" 건"],
     ["🟢 확실한 매칭", qualityCount.ok+" 건"],
     ["🟡 확인 필요(순서/보조매칭)", qualityCount.warn+" 건"],
-    ["총 매출(매칭분)", fmt(totalSale)+" 원"],
+    ["총 매출(실판매가, 매칭분)", fmt(totalSale)+" 원"],
     ["총 매출원가", fmt(totalCost)+" 원"],
-    ["총 매출이익", fmt(totalProfit)+" 원"],
-    ["평균 매출이익율", (totalSale? (totalProfit/totalSale*100):0).toFixed(1)+" %"],
+    ["💵 영업이익", fmt(totalProfit)+" 원"],
+    ["영업이익율", ((totalNetIn+totalStdOnlyNetIn) ? (totalProfit/(totalNetIn+totalStdOnlyNetIn)*100):0).toFixed(1)+" %"],
     ["실입금액(매칭분)", fmt(totalNetIn)+" 원"],
     ["표준정산미매칭 실입금액", fmt(totalStdOnlyNetIn)+" 원"],
     ["💰 총 실입금액(전체)", fmt(totalNetIn+totalStdOnlyNetIn)+" 원"],
@@ -1690,13 +1696,13 @@ function renderTab(tab){
   var r = lastResult;
   var html = "";
   if(tab==="mallSummary"){
-    html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th class="num">매칭건수</th><th class="num">매출</th><th class="num">매출(-VAT)</th><th class="num">매출원가</th><th class="num">매출원가(-VAT)</th><th class="num">매출이익</th><th class="num">매출이익(-VAT)</th><th class="num">매출이익율</th><th class="num">수수료</th><th class="num">수수료(-VAT)</th><th class="num">수수료율</th><th class="num">판매입금액</th><th class="num">공제금액</th><th class="num">공제금액(-VAT)</th><th class="num">공제금액차감후입금액</th><th class="num">실입금액(매칭분)</th><th class="num">표준정산미매칭 실입금액</th><th class="num">실입금액 합계</th></tr></thead><tbody>';
+    html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th class="num">매칭건수</th><th class="num">매출</th><th class="num">매출(-VAT)</th><th class="num">매출원가</th><th class="num">매출원가(-VAT)</th><th class="num">영업이익</th><th class="num">영업이익(-VAT)</th><th class="num">영업이익율</th><th class="num">수수료</th><th class="num">수수료(-VAT)</th><th class="num">수수료율</th><th class="num">판매입금액</th><th class="num">공제금액</th><th class="num">공제금액(-VAT)</th><th class="num">공제금액차감후입금액</th><th class="num">실입금액(매칭분)</th><th class="num">표준정산미매칭 실입금액</th><th class="num">실입금액 합계</th></tr></thead><tbody>';
     r.mallSummary.forEach(function(m){
       html += '<tr><td>'+esc(m.mall)+'</td><td class="num">'+m.count+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.saleExVat)+'</td><td class="num">'+fmt(m.cost)+'</td><td class="num">'+fmt(m.costExVat)+'</td><td class="num">'+fmt(m.profit)+'</td><td class="num">'+fmt(m.profitExVat)+'</td><td class="num">'+(m.profitRate*100).toFixed(1)+'%</td><td class="num">'+fmt(m.fee)+'</td><td class="num">'+fmt(m.feeExVat)+'</td><td class="num">'+(m.feeRate*100).toFixed(1)+'%</td><td class="num">'+fmt(m.netSaleIn)+'</td><td class="num">'+fmt(m.deduction)+'</td><td class="num">'+fmt(m.deductionExVat)+'</td><td class="num">'+fmt(m.afterDeduction)+'</td><td class="num">'+fmt(m.netIn)+'</td><td class="num">'+fmt(m.stdOnlyNetIn)+'</td><td class="num">'+fmt(m.netInTotal)+'</td></tr>';
     });
     html += '</tbody></table></div>';
   } else if(tab==="matched"){
-    html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th>주문번호</th><th>매칭방식</th><th>상품명</th><th class="num">매출</th><th class="num">매출원가</th><th class="num">매출이익</th><th class="num">이익율</th><th class="num">실입금액</th></tr></thead><tbody>';
+    html += '<div class="scrollbox"><table><thead><tr><th>몰</th><th>주문번호</th><th>매칭방식</th><th>상품명</th><th class="num">매출</th><th class="num">매출원가</th><th class="num">영업이익</th><th class="num">영업이익율</th><th class="num">실입금액</th></tr></thead><tbody>';
     if(r.matched.length===0) html += '<tr><td colspan="9" class="empty">매칭된 건이 없습니다</td></tr>';
     r.matched.forEach(function(m){
       html += '<tr><td>'+esc(m.erp.mall)+'</td><td>'+esc(m.erp.orderNo)+'</td><td><span class="pill '+m.quality+'">'+m.matchType+'</span></td><td>'+esc(m.erp.productName||m.std.productName||"")+'</td><td class="num">'+fmt(m.sale)+'</td><td class="num">'+fmt(m.cost)+'</td><td class="num">'+fmt(m.profit)+'</td><td class="num">'+m.margin.toFixed(1)+'%</td><td class="num">'+fmt(m.std.netIn)+'</td></tr>';
@@ -1736,7 +1742,7 @@ document.getElementById("s2_exportBtn").addEventListener("click", function(){
     return {"몰":m.mall,"매칭건수":m.count,"미매칭(ERP)":m.erpOnlyCount,"미매칭(표준정산)":m.stdOnlyCount,
       "매출":m.sale, "매출 (-VAT)":m.saleExVat,
       "매출원가":m.cost, "매출원가 (-VAT)":m.costExVat,
-      "매출이익":m.profit, "매출이익 (-VAT)":m.profitExVat, "매출이익율":Number((m.profitRate*100).toFixed(2)),
+      "영업이익":m.profit, "영업이익 (-VAT)":m.profitExVat, "영업이익율":Number((m.profitRate*100).toFixed(2)),
       "수수료":m.fee, "수수료 (-VAT)":m.feeExVat, "수수료율":Number((m.feeRate*100).toFixed(2)),
       "판매입금액":m.netSaleIn,
       "공제금액":m.deduction, "공제금액 (-VAT)":m.deductionExVat,
@@ -1749,8 +1755,8 @@ document.getElementById("s2_exportBtn").addEventListener("click", function(){
 
   var matchedSheet = r.matched.map(function(m){
     return {"몰":m.erp.mall,"주문번호":m.erp.orderNo,"매칭방식":m.matchType,
-      "상품명":m.erp.productName||m.std.productName||"","매출":m.sale,"매출원가":m.cost,"매출이익":m.profit,
-      "이익율(%)":Number(m.margin.toFixed(2)),"수수료":m.std.fee,"실입금액":m.std.netIn,"날짜":m.erp.date};
+      "상품명":m.erp.productName||m.std.productName||"","매출":m.sale,"매출원가":m.cost,"영업이익":m.profit,
+      "영업이익율(%)":Number(m.margin.toFixed(2)),"수수료":m.std.fee,"실입금액":m.std.netIn,"날짜":m.erp.date};
   });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(matchedSheet), "매칭상세");
 
@@ -1921,8 +1927,8 @@ function renderDashboard(data){
   var lastT = monthTotals(months[lastMonth]);
   var kpis = [
     {label:"누적 총 매출", val:dfmt(totalSale)+" 원", accent:true},
-    {label:"누적 총 매출이익", val:dfmt(totalProfit)+" 원"},
-    {label:"누적 평균 매출이익율", val:(totalSale? (totalProfit/totalSale*100):0).toFixed(1)+" %"},
+    {label:"누적 영업이익", val:dfmt(totalProfit)+" 원"},
+    {label:"누적 영업이익율", val:(totalNetIn? (totalProfit/totalNetIn*100):0).toFixed(1)+" %"},
     {label:"누적 총 실입금액", val:dfmt(totalNetIn)+" 원"},
     {label:"최근월("+lastMonth+") 매출", val:dfmt(lastT.sale)+" 원", sub:"저장 "+sortedMonths.length+"개월"}
   ];
@@ -1978,7 +1984,7 @@ function renderDashboard(data){
   var tbody = document.getElementById("dashHistoryBody");
   tbody.innerHTML = sortedMonths.slice().reverse().map(function(mo){
     var t = monthTotals(months[mo]);
-    var rate = t.sale ? (t.profit/t.sale*100) : 0;
+    var rate = t.netIn ? (t.profit/t.netIn*100) : 0;
     var savedAt = months[mo].savedAt ? new Date(months[mo].savedAt).toLocaleString("ko-KR") : "-";
     return '<tr class="month-row"><td>'+mo+'</td><td class="num">'+dfmt(t.sale)+'</td><td class="num">'+dfmt(t.cost)+'</td><td class="num">'+dfmt(t.profit)+'</td><td class="num">'+rate.toFixed(1)+'%</td><td class="num">'+dfmt(t.netIn)+'</td><td>'+savedAt+'</td><td class="actions"><button class="linklike" data-month="'+mo+'">삭제</button></td></tr>';
   }).join("");
